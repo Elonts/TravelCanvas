@@ -27,3 +27,13 @@
 - 新增外部 Provider 时，定义内部统一数据结构并实现超时、错误提示和降级处理。
 - 保持 TypeScript/JavaScript 的输入、响应和模型输出可校验；修改服务端行为时，至少更新冒烟测试。
 - 尊重已有用户改动；不使用破坏性 Git 命令覆盖未提交内容。
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
