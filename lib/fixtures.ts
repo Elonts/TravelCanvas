@@ -1,4 +1,4 @@
-export type Stop = { id: string; time: string; name: string; address: string; detail: string; duration: string; cost: number; indoor: boolean; lng: number; lat: number; verified: boolean };
+export type Stop = { id: string; time: string; name: string; address: string; detail: string; duration: string; durationMinutes?: number; cost: number; indoor: boolean; lng: number; lat: number; verified: boolean };
 export type Day = { title: string; date: string; stops: Stop[] };
 const cities: Record<string, Omit<Stop, 'id' | 'time' | 'detail' | 'duration' | 'cost'>[]> = {
   北京: [

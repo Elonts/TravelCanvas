@@ -5,3 +5,5 @@ node_modules/
 .next/
 coverage/
 *.log
+test-artifacts/
+*.tsbuildinfo
