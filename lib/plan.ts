@@ -1,12 +1,14 @@
 import 'server-only';
 import { z } from 'zod';
 import { candidateStops, type Day, type Stop } from './fixtures';
+import { recommendHotels } from './hotels.mjs';
 import { orderStops } from './optimizer.mjs';
 
 export const requestSchema = z.object({ destination: z.string().min(2).max(60), startDate: z.string().min(8), days: z.coerce.number().int().min(1).max(10), budget: z.coerce.number().min(500), travelers: z.coerce.number().int().min(1).max(8), transport: z.enum(['walk','transit','drive']), preferences: z.string().max(300).optional(), constraints: z.string().max(300).optional() });
 export type TripRequest = z.infer<typeof requestSchema>;
 export type DataState = 'live' | 'demo' | 'pending';
-export type Plan = { request: TripRequest; days: Day[]; budget: Record<string, number>; weather: { date: string; summary: string; high: number; low: number; rain: number; state: DataState; updatedAt: string }; hotels: { name: string; area: string; price: number; rating: number; distance: string; state: DataState; url?: string }[]; sources: { ai: DataState; map: DataState; weather: DataState; hotel: DataState; updatedAt: string }; risks: string[] };
+type HotelRecommendation = { id: string; title: string; area: string; rationale: string; filters: string; priceGuide: string; ctripUrl: string; query: string };
+export type Plan = { request: TripRequest; days: Day[]; budget: Record<string, number>; weather: { date: string; summary: string; high: number; low: number; rain: number; state: DataState; updatedAt: string }; hotels: HotelRecommendation[]; sources: { ai: DataState; map: DataState; weather: DataState; hotel: DataState; updatedAt: string }; risks: string[] };
 
 async function mapStops(stops: Stop[], destination: string) {
   if (!process.env.AMAP_API_KEY) return { stops, state: 'demo' as const };
@@ -50,5 +52,5 @@ export async function buildPlan(request: TripRequest): Promise<Plan> {
   const dayStops = request.days === 1 ? ordered : ordered.slice(0, Math.ceil(ordered.length / Math.min(request.days, 2)));
   const days = Array.from({ length: request.days }, (_, index) => ({ title: `第 ${index + 1} 天 · ${index === 0 ? '城市核心体验' : '慢游与在地探索'}`, date: new Date(new Date(request.startDate).getTime() + index * 86400000).toISOString().slice(0, 10), stops: index === 0 ? dayStops : ordered.slice().reverse().slice(0, Math.max(2, dayStops.length)) }));
   const weatherData = await weather(request.destination, days[0].date);
-  return { request, days, budget: { transport: Math.round(request.budget * .2), stay: Math.round(request.budget * .38), food: Math.round(request.budget * .22), activities: Math.round(request.budget * .1), buffer: Math.round(request.budget * .1) }, weather: weatherData, hotels: [{ name: '酒店供应商接入后显示实时结果', area: `${request.destination}行程核心区域`, price: 0, rating: 0, distance: '待查询', state: 'pending' }], sources: { ai: candidates.state, map: mapped.state, weather: weatherData.state, hotel: 'pending', updatedAt: new Date().toISOString() }, risks: ['门票、营业时间与预约规则可能变动，请在出发前确认。', weatherData.rain >= 50 ? '降雨概率较高，已建议优先选择室内活动。' : '建议保留至少 10% 机动预算应对价格变化。'] };
+  return { request, days, budget: { transport: Math.round(request.budget * .2), stay: Math.round(request.budget * .38), food: Math.round(request.budget * .22), activities: Math.round(request.budget * .1), buffer: Math.round(request.budget * .1) }, weather: weatherData, hotels: recommendHotels({ ...request, preferences: request.preferences || '', stops: ordered }), sources: { ai: candidates.state, map: mapped.state, weather: weatherData.state, hotel: 'demo', updatedAt: new Date().toISOString() }, risks: ['门票、营业时间与预约规则可能变动，请在出发前确认。', '酒店推荐按路线与预算计算，不包含实时房态或价格；请以携程页面为准。', weatherData.rain >= 50 ? '降雨概率较高，已建议优先选择室内活动。' : '建议保留至少 10% 机动预算应对价格变化。'] };
 }
