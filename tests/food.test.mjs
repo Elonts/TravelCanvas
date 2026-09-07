@@ -4,9 +4,9 @@ import { allocateBudget, createMealSlots, evaluateRestaurant, isOpenDuring, chan
 import { requestSchema, readJson } from '../lib/requests.mjs';
 import { PlanStore } from '../lib/plan-store.mjs';
 
-const request = requestSchema.parse({ destination: '杭州', startDate: '2026-09-10', days: 1, budget: 4000, travelers: 2, transport: 'walk' });
+const request = requestSchema.parse({ origin: '上海', destinations: ['杭州'], startDate: '2026-09-10', days: 1, budget: 4000, travelers: 2, transport: 'walk' });
 const stop = { id: 's1', name: '景点甲', time: '09:00', durationMinutes: 90, verified: true, lng: 120.1, lat: 30.2 };
-const days = [{ date: request.startDate, stops: [stop, { ...stop, id: 's2', name: '景点乙', time: '14:30' }] }];
+const days = [{ city: '杭州', date: request.startDate, stops: [{ ...stop, city: '杭州' }, { ...stop, city: '杭州', id: 's2', name: '景点乙', time: '14:30' }] }];
 const slot = createMealSlots(days, allocateBudget(request))[0];
 const restaurant = { id: 'r1', name: '测试餐厅（西湖店）', category: '杭帮菜', address: '测试地址', lng: 120.1, lat: 30.2, price: { low: 40, high: 60 }, hours: '10:00-22:00', tips: [] };
 const leg = (minutes, fare = 0) => ({ minutes, fare, meters: 500, state: 'live', from: '甲', to: '乙', queriedAt: '2026-09-06T00:00:00Z' });
@@ -93,6 +93,8 @@ test('schema rejects impossible dates, oversized notes, forged links and missing
   assert.equal(requestSchema.safeParse({ ...request, maxDetour: -1 }).success, false);
   assert.equal(requestSchema.safeParse({ ...request, noteUrl: 'https://evil.com/a' }).success, false);
   assert.equal(requestSchema.safeParse({ ...request, travelers: 0 }).success, false);
+  assert.equal(requestSchema.safeParse({ ...request, destinations: ['杭州', '北京'], days: 1 }).success, false);
+  assert.equal(requestSchema.safeParse({ ...request, destinations: ['不存在市'] }).success, false);
   await assert.rejects(readJson(new Request('http://localhost', { method: 'POST', body: 'x'.repeat(100) }), 10), /过长/);
 });
 

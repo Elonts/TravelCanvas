@@ -1,5 +1,5 @@
-export const fixtureRequest = { destination: '杭州', startDate: '2026-09-10', days: 1, budget: 6000, budgetBasis: 'group', travelers: 2, transport: 'walk', preferences: '', constraints: '', foodPreferences: '杭帮菜', dietary: '', foodMode: 'route', maxDetour: 30, mealMinutes: 60, queueMinutes: 20, noteText: '', noteUrl: '', noteDate: '' };
-export const fixtureDays = [{ date: '2026-09-10', stops: [{ id: 's1', name: '西湖风景名胜区', address: '杭州', lng: 120.1, lat: 30.2, verified: true, time: '09:00', durationMinutes: 90 }, { id: 's2', name: '灵隐寺', address: '杭州', lng: 120.2, lat: 30.2, verified: true, time: '14:30', durationMinutes: 90 }] }];
+export const fixtureRequest = { origin: '上海', destinations: ['杭州'], startDate: '2026-09-10', days: 1, budget: 6000, budgetBasis: 'group', travelers: 2, transport: 'walk', preferences: '', constraints: '', foodPreferences: '杭帮菜', dietary: '', foodMode: 'route', maxDetour: 30, mealMinutes: 60, queueMinutes: 20, noteText: '', noteUrl: '', noteDate: '' };
+export const fixtureDays = [{ city: '杭州', date: '2026-09-10', stops: [{ id: 's1', city: '杭州', name: '西湖风景名胜区', address: '杭州', lng: 120.1, lat: 30.2, verified: true, time: '09:00', durationMinutes: 90 }, { id: 's2', city: '杭州', name: '灵隐寺', address: '杭州', lng: 120.2, lat: 30.2, verified: true, time: '14:30', durationMinutes: 90 }] }];
 export const fixtureContent = '测试江南餐厅（西湖店）在美食推荐榜中被提到，建议提前取号。西湖风景名胜区步行距离较长，建议穿舒适鞋。';
 export const testEnv = { AMAP_API_KEY: 'test-only-map', TAVILY_API_KEY: 'test-only-search', DEEPSEEK_API_KEY: 'test-only-model' };
 export function poi(index, branch = '西湖') {
@@ -19,6 +19,11 @@ export async function fixtureFetch(input, options = {}) {
     return reply({ choices: [{ message: { content: JSON.stringify(content) } }] });
   }
   if (url.hostname === 'restapi.amap.com') {
+    if (url.pathname.includes('/geocode/geo')) {
+      const name = url.searchParams.get('address');
+      const coordinates = { 上海: '121.4737,31.2304', 杭州: '120.1551,30.2741', 北京: '116.4074,39.9042', 成都: '104.0665,30.5723' };
+      return reply({ status: '1', geocodes: [{ formatted_address: `${name}（测试）`, location: coordinates[name] || '113.2644,23.1291' }] });
+    }
     if (url.pathname.includes('/place/')) {
       if (url.searchParams.get('types') === '050000') return reply({ status: '1', pois: Array.from({ length: 6 }, (_, i) => poi(i)) });
       if (url.searchParams.get('types') === '110000') return reply({ status: '1', pois: Array.from({ length: 12 }, (_, i) => ({

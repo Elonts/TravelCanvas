@@ -53,10 +53,20 @@ for (const mode of ['fixtures', 'offline']) {
       assert.equal(failedModel.value.sources.ai, 'demo');
     } else assert.ok(multi.value.days.every(day => day.warning));
     if (mode === 'offline') {
-      const unknown = await post('/api/plan', { ...fixtureRequest, destination: '广州', days: 3 });
+      const unknown = await post('/api/plan', { ...fixtureRequest, destinations: ['广州'], days: 3 });
       assert.equal(unknown.status, 200);
       assert.ok(unknown.value.days.every(day => day.stops.length === 0 && day.warning));
       assert.equal(unknown.value.food.meals.length, 0);
+    }
+    const cities = await post('/api/plan', { ...fixtureRequest, destinations: ['北京', '杭州'], days: 2 });
+    assert.equal(cities.status, 200, JSON.stringify(cities.value));
+    assert.equal(cities.value.route.cityOrder.length, 2);
+    assert.deepEqual(cities.value.days.map(day => day.city), cities.value.route.cityOrder);
+    assert.deepEqual(cities.value.route.points.map(point => point.order), cities.value.route.points.map((_, index) => index + 1));
+    if (mode === 'fixtures') {
+      assert.deepEqual(cities.value.route.cityOrder, ['杭州', '北京']);
+      assert.equal(cities.value.route.transfers.length, 2);
+      assert.equal(cities.value.route.state, 'live');
     }
     console.log(`PASS production HTTP smoke: ${mode}, one and three days`);
   } finally { server.stop(); }

@@ -4,7 +4,8 @@ import { pathToFileURL } from 'node:url';
 import { startServer } from './helpers/server.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE_PATH ? pathToFileURL(process.env.PLAYWRIGHT_MODULE_PATH).href : 'playwright');
-const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) });
+const channel = process.env.PLAYWRIGHT_CHANNEL || (process.platform === 'win32' ? 'msedge' : '');
+const browser = await chromium.launch({ headless: true, ...(channel ? { channel } : {}) });
 await mkdir('test-artifacts', { recursive: true });
 try {
   for (const mode of ['fixtures', 'offline']) {
@@ -13,11 +14,23 @@ try {
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     try {
       await page.goto(server.base);
+      await page.getByLabel('选择一个或多个目的地城市').click();
+      await page.getByLabel('搜索省份或城市').fill('浙江');
+      assert.equal(await page.getByText('浙江省', { exact: true }).count(), 1);
+      assert.equal(await page.getByLabel('杭州').isChecked(), true);
+      await page.getByLabel('选择一个或多个目的地城市').click();
       await page.getByLabel('旅行天数').fill('1');
       await page.getByLabel('旅行预算（元）').fill('6000');
       await page.getByLabel('餐饮偏好').fill('杭帮菜');
       await page.getByRole('button', { name: '生成旅行与美食方案' }).click();
       await page.locator('.result').waitFor({ timeout: 30000 });
+      await page.locator('.route-map').waitFor();
+      assert.ok(await page.locator('.map-marker').count() >= 4);
+      const mapPoint = page.locator('.map-point-list button').nth(1);
+      const mapPointName = (await mapPoint.innerText()).replace(/^\d+\s*/, '');
+      await mapPoint.click();
+      assert.ok((await page.locator('.map-popover').innerText()).includes(mapPointName));
+      await page.getByRole('button', { name: '第 1 天', exact: true }).click();
       assert.equal(await page.locator('.meal').count(), 2);
       if (mode === 'fixtures') {
         const meal = page.locator('.meal').first();

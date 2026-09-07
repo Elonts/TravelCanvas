@@ -16,7 +16,7 @@ export type RouteLeg = {
   fare: number | null; state: 'live' | 'pending'; queriedAt: string;
 };
 export type MealSlot = {
-  id: string; dayIndex: number; label: string; date: string;
+  id: string; dayIndex: number; city: string; label: string; date: string;
   previous: import('./fixtures').Stop; next: import('./fixtures').Stop | null;
   earliest: number; latest: number; depart: number; nextDeadline: number;
   foodLimit: number; transportLimit: number;

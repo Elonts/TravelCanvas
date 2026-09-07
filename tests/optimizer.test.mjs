@@ -12,3 +12,8 @@ test('does not mutate the original stop collection', () => {
   orderStops(stops);
   assert.equal(stops.length, 2);
 });
+
+test('uses an explicit origin to choose the closest first stop', () => {
+  const stops = [{ id: 'west', lng: 100, lat: 30 }, { id: 'east', lng: 120, lat: 30 }, { id: 'middle', lng: 110, lat: 30 }];
+  assert.deepEqual(orderStops(stops, { lng: 121, lat: 30 }).map(stop => stop.id), ['east', 'middle', 'west']);
+});

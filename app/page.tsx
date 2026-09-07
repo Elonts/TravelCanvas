@@ -3,6 +3,8 @@
 import { FormEvent, Fragment, useState } from 'react';
 import type { Plan } from '../lib/plan';
 import { FoodSummary, MealCard, SourceTip, type MealAction } from './food-view';
+import { CityMultiSelect } from './city-multi-select';
+import { RouteMap } from './route-map';
 
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const sourceName = (state: string) => state === 'live' ? '已查询' : state === 'demo' ? '演示数据' : '待确认';
@@ -13,10 +15,14 @@ export default function Home() {
   const [changing, setChanging] = useState(false);
   const [error, setError] = useState('');
   const [changeError, setChangeError] = useState('');
+  const [destinations, setDestinations] = useState<string[]>(['杭州']);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setLoading(true); setError(''); setChangeError('');
     try {
-      const response = await fetch('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) });
+      if (!destinations.length) throw Error('请至少选择一个目的地城市');
+      const body: Record<string, FormDataEntryValue | string[]> = Object.fromEntries(new FormData(event.currentTarget));
+      body.destinations = destinations;
+      const response = await fetch('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
     } catch (e) { setError(e instanceof Error ? e.message : '生成失败'); } finally { setLoading(false); }
   }
@@ -33,7 +39,8 @@ export default function Home() {
     <section className="hero"><div><span className="eyebrow">可信旅行方案 · BETA</span><h1>让每一步，<em>更值得抵达。</em></h1><p>沿着想去的路线，找到合口味、少绕路的具体餐厅。把预算、用餐时间与有来源的攻略一起安排好。</p></div><aside><b>行程里，也有值得期待的一餐</b><span>✓ 具体分店与真实路线查询</span><span>✓ 全员餐饮预算与绕路约束</span><span>✓ 小红书公开笔记与来源 Tips</span><span>✓ 换店重算与餐厅锁定</span></aside></section>
     <section className="panel"><div className="section-head"><div><span className="eyebrow">01 / 旅行需求</span><h2>开始规划</h2></div><small>方案暂存 30 分钟，用于换店调整</small></div>
       <form onSubmit={submit}><div className="grid">
-        <label>目的地<input required name="destination" placeholder="如：杭州" defaultValue="杭州" maxLength={60} /></label>
+        <label>出发地<input required name="origin" placeholder="如：上海市静安区" defaultValue="上海" maxLength={60} /><small>可填写城市、车站或具体地址</small></label>
+        <div className="destination-field"><span className="field-label">目的地（可多选）</span><CityMultiSelect value={destinations} onChange={setDestinations} /></div>
         <label>出发日期<input required type="date" name="startDate" defaultValue={today} /></label>
         <label>旅行天数<input required type="number" name="days" min="1" max="10" defaultValue="2" /></label>
         <label>旅行预算（元）<input required type="number" name="budget" min="500" max="1000000" defaultValue="4000" /></label>
@@ -68,10 +75,11 @@ function PlanView({ plan, busy, onAction, changeError }: { plan: Plan; busy: boo
   const attachedNames = new Set(plan.days.flatMap(day => day.stops.map(stop => stop.name)));
   const generalTips = plan.food.tips.filter(tip => !attachedNames.has(tip.placeName) && !plan.food.meals.some(meal => meal.options.some(o => o.restaurant.name === tip.placeName)));
   return <section className="result" aria-busy={busy}>
-    <div className="section-head"><div><span className="eyebrow">02 / 旅行方案</span><h2>{plan.request.destination} · {plan.request.days} 天行程</h2></div><small>更新于 {new Date(plan.sources.updatedAt).toLocaleString('zh-CN')}</small></div>
+    <div className="section-head"><div><span className="eyebrow">02 / 旅行方案</span><h2>{plan.route.cityOrder.join(' → ')} · {plan.request.days} 天行程</h2><p className="route-origin">从 {plan.request.origin} 出发</p></div><small>更新于 {new Date(plan.sources.updatedAt).toLocaleString('zh-CN')}</small></div>
     <div className="notice">当前数据状态：AI {sourceName(plan.sources.ai)} · 景点地图 {sourceName(plan.sources.map)} · 天气 {sourceName(plan.sources.weather)} · 酒店 {sourceName(plan.sources.hotel)} · 小红书公开检索 {sourceName(plan.food.searchState)}。演示数据不代表实时地点或价格。</div>
     {!!plan.food.warnings.length && <div className="notice">{plan.food.warnings.map(warning => <p key={warning}>{warning}</p>)}</div>}
     {changeError && <p className="error change-error" role="alert">{changeError}</p>}
+    <RouteMap route={plan.route} />
     <div className="layout"><div>{plan.days.map((day, dayIndex) => <article className="day" key={day.date}>
       <h3>{day.title}<small>{day.date}</small></h3>
       {day.warning && <p className="notice">{day.warning}</p>}
@@ -86,7 +94,7 @@ function PlanView({ plan, busy, onAction, changeError }: { plan: Plan; busy: boo
       {!!plan.food.sources.length && <details className="card"><summary>本次攻略来源（{plan.food.sources.length}）</summary>{plan.food.sources.map(source => <p key={source.id}>{source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> : source.title} · {source.kind === 'search' ? '搜索摘要' : '用户提供'} · 发布 {source.publishedAt || '未知'} · 查询 {new Date(source.queriedAt).toLocaleString('zh-CN')}</p>)}</details>}
     </div><aside className="sidebar">
       <FoodSummary plan={plan} />
-      <div className="card weather"><span className="eyebrow">天气建议 · {sourceName(plan.weather.state)}</span><h3>{plan.weather.summary}</h3>{plan.weather.state === 'live' && <><b>{plan.weather.low}° — {plan.weather.high}°</b><p>降水概率 {plan.weather.rain}%</p></>}<p>Open-Meteo · 更新于 {new Date(plan.weather.updatedAt).toLocaleString('zh-CN')}</p></div>
+      <div className="card weather"><span className="eyebrow">首站 {plan.weather.city} 天气 · {sourceName(plan.weather.state)}</span><h3>{plan.weather.summary}</h3>{plan.weather.state === 'live' && <><b>{plan.weather.low}° — {plan.weather.high}°</b><p>降水概率 {plan.weather.rain}%</p></>}<p>Open-Meteo · 更新于 {new Date(plan.weather.updatedAt).toLocaleString('zh-CN')}</p></div>
       <div className="card"><span className="eyebrow">全员预算分配 · 非已核验支出</span>{Object.entries(plan.budget).map(([key, value]) => <p className="line" key={key}><span>{labels[key]}</span><b>¥{value}</b></p>)}<p className="line total"><span>合计（{plan.request.travelers} 人）</span><b>¥{total}</b></p></div>
       <HotelCards plan={plan} /><div className="card"><span className="eyebrow">出行提醒</span><ul>{plan.risks.map(r => <li key={r}>{r}</li>)}</ul></div>
     </aside></div>
