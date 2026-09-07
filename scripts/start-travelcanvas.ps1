@@ -34,6 +34,7 @@ function Open-TravelCanvas {
 }
 
 Set-Location -LiteralPath $projectRoot
+New-Item -ItemType Directory -Path $runtimeRoot -Force | Out-Null
 
 $node = Get-Command node.exe -ErrorAction SilentlyContinue
 $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
@@ -46,6 +47,12 @@ if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'node_modules\next\pack
 
 $existing = Get-LocalPage
 if (Test-TravelCanvasPage $existing) {
+  $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalAddress -in @('127.0.0.1', '::1') } | Select-Object -First 1
+  if ($listener) {
+    $processInfo = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)" -ErrorAction SilentlyContinue
+    $isThisProject = $processInfo -and $processInfo.ExecutablePath -like '*\node.exe' -and $processInfo.CommandLine -like "*$projectRoot*" -and $processInfo.CommandLine -like '*next*dist*bin*next*'
+    if ($isThisProject) { [System.IO.File]::WriteAllText($pidFile, [string]$listener.OwningProcess) }
+  }
   Write-Host "TravelCanvas is already running at $url"
   Open-TravelCanvas
   exit 0
@@ -54,7 +61,6 @@ if ($existing) {
   Stop-WithMessage "Port $Port is already used by another web application. Close it or start TravelCanvas on another port."
 }
 
-New-Item -ItemType Directory -Path $runtimeRoot -Force | Out-Null
 if (Test-Path -LiteralPath $pidFile) {
   $savedPid = [int](Get-Content -LiteralPath $pidFile -Raw)
   $savedProcess = Get-Process -Id $savedPid -ErrorAction SilentlyContinue

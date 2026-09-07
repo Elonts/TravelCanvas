@@ -15,8 +15,8 @@ if (-not (Test-Path -LiteralPath $pidFile)) {
 
 $savedPid = [int](Get-Content -LiteralPath $pidFile -Raw)
 $processInfo = Get-CimInstance Win32_Process -Filter "ProcessId = $savedPid" -ErrorAction SilentlyContinue
-$expectedCli = Join-Path $projectRoot 'node_modules\next\dist\bin\next'
-if ($processInfo -and $processInfo.ExecutablePath -like '*\node.exe' -and $processInfo.CommandLine -like "*$expectedCli*") {
+$isThisProject = $processInfo -and $processInfo.ExecutablePath -like '*\node.exe' -and $processInfo.CommandLine -like "*$projectRoot*" -and $processInfo.CommandLine -like '*next*dist*bin*next*'
+if ($isThisProject) {
   Stop-Process -Id $savedPid -Force
   Write-Host 'TravelCanvas has been stopped.'
 } elseif ($processInfo) {

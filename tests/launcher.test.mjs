@@ -35,8 +35,11 @@ test('launcher rebuilds only when the production build is missing or older than 
 
 test('launcher records the background process and the stop command only terminates the matching Next process', () => {
   assert.match(script, /server-\$Port\.pid/);
+  assert.match(script, /Get-NetTCPConnection -LocalPort \$Port/);
+  assert.match(script, /listener\.OwningProcess/);
   assert.match(stopCommand, /stop-travelcanvas\.ps1/);
   assert.match(stopScript, /Get-CimInstance Win32_Process/);
   assert.match(stopScript, /CommandLine -like/);
+  assert.match(stopScript, /\*\$projectRoot\*/);
   assert.match(stopScript, /Stop-Process -Id \$savedPid/);
 });
