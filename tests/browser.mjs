@@ -12,6 +12,7 @@ try {
     const server = await startServer(mode);
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
+    const entertainmentRequests = []; page.on('request', request => { if (request.url().includes('/api/plan/entertainment')) entertainmentRequests.push(request.postDataJSON()); });
     try {
       await page.goto(server.base);
       await page.getByLabel('选择一个或多个目的地城市').click();
@@ -71,15 +72,39 @@ try {
         await meal.getByRole('button', { name: '解锁餐厅' }).waitFor();
         assert.equal(await meal.getByRole('button', { name: '更省钱', exact: true }).isDisabled(), true);
         assert.ok(await page.locator('.evidence-tip').count() > 0);
-        const entertainmentSelect = page.getByLabel('更换或删除当天娱乐活动');
-        assert.ok(await entertainmentSelect.count() === 1);
+        const entertainmentType = page.getByLabel('娱乐项目');
+        assert.ok(await entertainmentType.count() === 1);
+        for (const option of ['台球', '足浴', '剧本杀', '酒馆']) assert.ok((await entertainmentType.locator('option').allTextContents()).includes(option));
         const saveDay = page.getByRole('button', { name: '保存修改并重新规划当天路线' });
         assert.equal(await saveDay.isDisabled(), true);
-        const stopsBeforeEntertainmentRemoval = await page.locator('.day .stop').count();
-        await entertainmentSelect.selectOption('');
+        await entertainmentType.selectOption({ label: '足浴' });
+        await Promise.all([page.waitForResponse(response => response.url().includes('/api/plan/entertainment') && response.request().method() === 'POST'), page.getByRole('button', { name: '按当天路线查找地点' }).click()]);
+        const venue = page.getByLabel('推荐的具体地点');
+        await venue.waitFor();
+        const venueValue = await venue.locator('option').nth(1).getAttribute('value');
+        assert.ok(venueValue);
+        await venue.selectOption(venueValue);
+        await page.getByRole('button', { name: '添加到当天草稿' }).click();
+        await entertainmentType.selectOption({ label: '剧本杀' });
+        await Promise.all([page.waitForResponse(response => response.url().includes('/api/plan/entertainment') && response.request().method() === 'POST'), page.getByRole('button', { name: '按当天路线查找地点' }).click()]);
+        assert.deepEqual(entertainmentRequests.at(-1).selectedIds, [venueValue]);
+        assert.equal(await page.locator('.entertainment-draft').count(), 1, 'searching another type must keep the first draft venue');
+        const secondVenue = page.getByLabel('推荐的具体地点');
+        const secondValues = await secondVenue.locator('option').evaluateAll(options => options.map(option => option.value).filter(Boolean));
+        const secondValue = secondValues.find(value => value !== venueValue);
+        assert.ok(secondValue);
+        await secondVenue.selectOption(secondValue);
+        const addSecond = page.getByRole('button', { name: '添加到当天草稿' });
+        assert.equal(await addSecond.isDisabled(), false);
+        await addSecond.click();
+        assert.equal(await page.locator('.entertainment-draft > div').count(), 2, JSON.stringify({ draft: await page.locator('.entertainment-draft').innerText(), type: await entertainmentType.inputValue(), venue: await secondVenue.inputValue(), secondValue }));
+        assert.equal(await saveDay.isDisabled(), false);
+        const stopsBeforeEntertainment = await page.locator('.day .stop').count();
         await Promise.all([page.waitForResponse(response => response.url().includes('/api/plan/day') && response.request().method() === 'POST'), saveDay.click()]);
-        await page.getByText('景点替换和娱乐更改会在点击此按钮后一次生效。').waitFor();
-        assert.equal(await page.locator('.day .stop').count(), stopsBeforeEntertainmentRemoval - 1);
+        await page.getByText(/检索本身不会立即改变路线/).waitFor();
+        assert.equal(await page.locator('.day .stop').count(), stopsBeforeEntertainment + 2);
+        assert.ok((await page.locator('.day').innerText()).includes('足浴'));
+        assert.ok((await page.locator('.day').innerText()).includes('剧本杀'));
       }
 
       await page.screenshot({ path: `test-artifacts/${mode}-desktop.png`, fullPage: true });

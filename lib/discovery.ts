@@ -4,6 +4,7 @@ import { candidateStops } from './fixtures';
 import { createMapProvider, extractTips, searchNotes } from './food-providers.mjs';
 import type { DiscoveryCandidate, DiscoveryEvidence } from './discovery-types';
 import type { TripRequest, DataState } from './plan';
+import { amapImageAttribution, fillMissingWebImages } from './web-images.mjs';
 
 const suggestionSchema = z.object({
   attractions: z.array(z.object({ name: z.string().trim().min(2).max(100), reason: z.string().trim().min(2).max(240) })).max(8),
@@ -49,13 +50,14 @@ function makeCandidate(place: any, kind: DiscoveryCandidate['kind'], request: Tr
   const reason = reasons.get(normalize(place.name)) || (kind === 'food'
     ? evidence.length ? `${new Set(evidence.map(item => item.sourceId)).size} 个公开笔记线索与餐饮偏好综合排序。` : '高德餐饮候选；暂未匹配到具体小红书证据。'
     : `根据“${request.preferences || '综合体验'}”生成，并已通过高德地点核验。`);
+  const queriedAt = new Date().toISOString();
   return {
     id: `${kind}:${place.city}:${place.poiId}`, poiId: place.poiId, kind, city: place.city, name: place.name, address: place.address,
-    lng: place.lng, lat: place.lat, category: place.category, imageUrl: place.imageUrl, durationMinutes: kind === 'attraction' ? 120 : kind === 'entertainment' ? 90 : 60,
+    lng: place.lng, lat: place.lat, category: place.category, imageUrl: place.imageUrl, imageAttribution: amapImageAttribution(place.imageUrl, queriedAt), durationMinutes: kind === 'attraction' ? 120 : kind === 'entertainment' ? 90 : 60,
     estimatedCost: kind === 'food' ? place.price?.high ?? null : null, price: place.price, hours: place.hours,
     introduction: evidence[0]?.quote || `${place.category} · ${place.address || `${place.city}，详细地址待确认`}`,
     recommendationReason: reason, source: kind === 'food' && evidence.length ? '高德地图 POI + 小红书公开笔记' : '高德地图 POI',
-    queriedAt: new Date().toISOString(), verified: true, navigationUrl: place.navigationUrl, evidence, evidenceScore: score, featuredDishes: [...new Set(evidence.flatMap(item => item.dishes || []))],
+    queriedAt, verified: true, navigationUrl: place.navigationUrl, evidence, evidenceScore: score, featuredDishes: [...new Set(evidence.flatMap(item => item.dishes || []))],
   };
 }
 
@@ -98,8 +100,9 @@ export async function discoverCandidates(request: TripRequest) {
     mapStates.push(attractions.length && food.length ? 'live' : 'pending');
   }
   if (!candidates.some(candidate => candidate.kind === 'food' && candidate.evidence.length)) warnings.push('本次没有匹配到带具体小红书证据的分店；无证据餐厅仅作为高德候选展示。');
+  const picturedCandidates = await fillMissingWebImages(candidates, process.env, fetch);
   return {
-    request, candidates, warnings,
+    request, candidates: picturedCandidates, warnings,
     sources: { search: searches.every(search => search.state === 'live') ? 'live' as const : 'pending' as const, ai: stateOf(suggestions.map(item => item.state)), map: stateOf(mapStates), updatedAt: new Date().toISOString() },
   };
 }
@@ -122,7 +125,7 @@ export async function discoverCustomCandidates(request: TripRequest, city: strin
     warnings.push(...result.warnings.map(warning => `${city}自定义饭店检索：${warning}`));
   }
   const reasons = new Map(chosen.map(place => [normalize(place.name), '你手动添加并经高德核验的地点。']));
-  const candidates = chosen.map(place => makeCandidate(place, kind, request, reasons, tips, sources));
+  const candidates = await fillMissingWebImages(chosen.map(place => makeCandidate(place, kind, request, reasons, tips, sources)), process.env, fetch);
   const missing = names.filter(name => !candidates.some(candidate => normalize(candidate.name) === normalize(name)));
   if (missing.length) warnings.push(`未精确匹配：${missing.join('、')}。请核对名称或补充分店名。`);
   return { candidates, warnings };

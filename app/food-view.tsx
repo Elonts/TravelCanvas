@@ -21,7 +21,7 @@ export function SourceTip({ tip, food }: { tip: EvidenceTip; food: FoodPlan }) {
 function RestaurantOption({ option, food, label, children }: { option: MealOption; food: FoodPlan; label: string; children?: React.ReactNode }) {
   const restaurant = option.restaurant;
   return <div className={`restaurant ${option.eligible ? '' : 'unconfirmed'}`}>
-    {restaurant.imageUrl && <img className="restaurant-image" src={restaurant.imageUrl} alt={`${restaurant.name}的高德地点图片`} loading="lazy" />}
+    {restaurant.imageUrl && <><img className="restaurant-image" src={restaurant.imageUrl} alt={`${restaurant.name}的${restaurant.imageAttribution?.label || '地点图片'}`} loading="lazy" />{restaurant.imageAttribution && <small className="image-source">图片：{restaurant.imageAttribution.sourceUrl ? <a href={restaurant.imageAttribution.sourceUrl} target="_blank" rel="noreferrer">{restaurant.imageAttribution.label} ↗</a> : restaurant.imageAttribution.label}</small>}</>}
     <span className="eyebrow">{label}</span>
     <h4>{restaurant.name}</h4><p className="address">{restaurant.address}</p>
     <div className="tags"><span>具体地点已核验</span><span>{restaurant.category}</span><span>{restaurant.preferred ? '用户已选择' : option.eligible ? '按参考数据满足约束' : option.canAcceptPending ? '可接受待确认后安排' : '存在明确冲突'}</span></div>

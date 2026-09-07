@@ -1,4 +1,5 @@
 import type { TripRequest } from './plan';
+import type { ImageAttribution } from './web-images.mjs';
 
 export type DiscoveryEvidence = {
   sourceId: string; title: string; url: string | null; quote: string;
@@ -9,7 +10,7 @@ export type DiscoveryEvidence = {
 export type DiscoveryCandidate = {
   id: string; poiId: string; kind: 'attraction' | 'food' | 'entertainment';
   city: string; name: string; address: string; lng: number; lat: number;
-  category: string; imageUrl: string | null; introduction: string;
+  category: string; imageUrl: string | null; imageAttribution?: ImageAttribution | null; introduction: string;
   recommendationReason: string; durationMinutes: number; estimatedCost: number | null;
   price: { low: number; high: number } | null; hours: string;
   source: string; queriedAt: string; verified: true; navigationUrl: string;

@@ -61,11 +61,12 @@ function CustomPlaceInput({ city, kind, value, busy, error, onChange, onAdd }: {
 function CandidateCard({ candidate, checked, onToggle }: { candidate: DiscoveryCandidate; checked: boolean; onToggle: (id: string) => void }) {
   return <article className={`candidate-card ${checked ? 'selected' : ''}`}>
     <button type="button" className="candidate-toggle" aria-pressed={checked} onClick={() => onToggle(candidate.id)}><span>{checked ? '✓' : '+'}</span>{checked ? '已选择' : '加入行程'}</button>
-    <div className="candidate-image">{candidate.imageUrl ? <img src={candidate.imageUrl} alt={`${candidate.name}的高德地点图片`} loading="lazy" /> : <span aria-label={`${labels[candidate.kind]}暂无图片`}>{icons[candidate.kind]}</span>}</div>
+    <div className="candidate-image">{candidate.imageUrl ? <img src={candidate.imageUrl} alt={`${candidate.name}的${candidate.imageAttribution?.label || '地点图片'}`} loading="lazy" /> : <span aria-label={`${labels[candidate.kind]}暂无图片`}>{icons[candidate.kind]}</span>}</div>
     <div className="candidate-content"><span className="eyebrow">{labels[candidate.kind]} · {candidate.city}</span><h4>{candidate.name}</h4><p className="candidate-address">⌖ {candidate.address}</p><p>{candidate.introduction}</p><p className="candidate-reason"><b>为什么推荐：</b>{candidate.recommendationReason}</p>
       <div className="tags"><span>建议 {candidate.durationMinutes} 分钟</span><span>{candidate.estimatedCost === null ? '费用待确认' : `参考 ¥${candidate.estimatedCost}`}</span><span>{candidate.category}</span></div>
       {!!candidate.evidence.length && <details className="candidate-evidence"><summary>小红书公开笔记证据（{candidate.evidence.length}）</summary>{candidate.evidence.map(evidence => <div key={`${evidence.sourceId}-${evidence.quote}`}><p>“{evidence.quote}”</p><small>{evidence.url ? <a href={evidence.url} target="_blank" rel="noreferrer">{evidence.title} ↗</a> : evidence.title} · 发布 {evidence.publishedAt || '未知'} · 查询 {stamp(evidence.queriedAt)}</small></div>)}</details>}
-      <small className="candidate-source">{candidate.source} · 查询 {stamp(candidate.queriedAt)}</small>
+      {candidate.imageAttribution && <small className="candidate-source">图片：{candidate.imageAttribution.sourceUrl ? <a href={candidate.imageAttribution.sourceUrl} target="_blank" rel="noreferrer">{candidate.imageAttribution.label} ↗</a> : candidate.imageAttribution.label} · 查询 {stamp(candidate.imageAttribution.queriedAt)}</small>}
+      <small className="candidate-source">地点：{candidate.source} · 查询 {stamp(candidate.queriedAt)}</small>
     </div>
   </article>;
 }

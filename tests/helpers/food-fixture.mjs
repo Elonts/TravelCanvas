@@ -35,7 +35,7 @@ export async function fixtureFetch(input, options = {}) {
         id: `${url.searchParams.get('keywords')}-${i}`, name: i === 0 ? url.searchParams.get('keywords') : `地图补充公园${i}`, address: '杭州测试景点地址', location: `${120.1 + i * .001},30.2`, type: '风景名胜;公园广场', typecode: '110101', photos: [{ url: 'https://store.is.autonavi.com/showpic/test-attraction.jpg?v=valid' }],
       })) });
       if (url.searchParams.get('types') === '080000') return reply({ status: '1', pois: Array.from({ length: 8 }, (_, i) => ({
-        id: `entertainment-${i}`, name: i === 0 ? url.searchParams.get('keywords') : `测试休闲场所${i}`, address: '杭州测试娱乐地址', location: `${120.12 + i * .001},30.22`, type: '体育休闲服务;娱乐场所', typecode: '080301', photos: [{ url: 'https://store.is.autonavi.com/showpic/test-entertainment.jpg?v=valid' }],
+        id: `entertainment-${url.searchParams.get('keywords')}-${i}`, name: i === 0 ? url.searchParams.get('keywords') : `${url.searchParams.get('keywords')}测试场所${i}`, address: '杭州测试娱乐地址', location: `${120.12 + i * .001},30.22`, type: '体育休闲服务;娱乐场所', typecode: '080301', photos: [{ url: 'https://store.is.autonavi.com/showpic/test-entertainment.jpg?v=valid' }],
       })) });
       return reply({ status: '1', pois: [{ id: `attraction-${url.searchParams.get('keywords')}`, name: url.searchParams.get('keywords'), address: '杭州测试景点地址', location: '120.1,30.2' }] });
     }

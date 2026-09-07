@@ -25,6 +25,14 @@ test('budget basis, rounding and all meal caps conserve group budget', () => {
     assert.ok(slots.reduce((n, s) => n + s.transportLimit, 0) <= budget.transport);
   }
 });
+test('budget transport cap follows selected mode and one-day trips do not reserve lodging', () => {
+  const walk = allocateBudget({ ...request, days: 1, transport: 'walk' });
+  const transit = allocateBudget({ ...request, days: 1, transport: 'transit' });
+  const drive = allocateBudget({ ...request, days: 1, transport: 'drive' });
+  assert.equal(walk.stay, 0);
+  assert.ok(walk.transport < transit.transport && transit.transport < drive.transport);
+  assert.ok(walk.remaining > 0 && !('buffer' in walk));
+});
 test('uses directed route insertion delta and multiplies food cost by travelers', () => {
   assert.equal(option.extraMinutes, 10); assert.equal(option.totalHigh, 120); assert.equal(option.eligible, true);
   assert.equal(evaluate(restaurant, slot, request, [leg(3), leg(3)], leg(10)).extraMinutes, 0);

@@ -62,11 +62,19 @@ export default function Home() {
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
     } catch (e) { setChangeError(userFacingRequestError(e, '调整失败')); } finally { setChanging(false); }
   };
-  const replanDay = async (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentId: string | null) => {
+  const searchEntertainment = async (dayIndex: number, preference: string, query: string, selectedIds: string[]) => {
     if (!plan?.planId || plan.revision === undefined || changing || loading) return;
     setChanging(true); setChangeError('');
     try {
-      const response = await fetch('/api/plan/day', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, dayIndex, replacements, removedStopIds: [], entertainmentId }) });
+      const response = await fetch('/api/plan/entertainment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, dayIndex, preference, query, selectedIds }) });
+      const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
+    } catch (e) { setChangeError(userFacingRequestError(e, '娱乐地点查询失败')); } finally { setChanging(false); }
+  };
+  const replanDay = async (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentIds: string[]) => {
+    if (!plan?.planId || plan.revision === undefined || changing || loading) return;
+    setChanging(true); setChangeError('');
+    try {
+      const response = await fetch('/api/plan/day', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, dayIndex, replacements, removedStopIds: [], entertainmentIds }) });
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
     } catch (e) { setChangeError(userFacingRequestError(e, '当天路线重新规划失败')); } finally { setChanging(false); }
   };
@@ -103,27 +111,43 @@ export default function Home() {
       {error && <p className="error" role="alert">{error}</p>}
     </section>
     {discovery && <CandidatePicker discovery={discovery} selectedIds={selectedIds} busy={loading} error={plan ? '' : error} onToggle={toggleCandidate} onGenerate={generatePlan} onAddCustom={addCustomCandidates} />}
-    {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} onReplanDay={replanDay} changeError={changeError} />}
+    {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} onSearchEntertainment={searchEntertainment} onReplanDay={replanDay} changeError={changeError} />}
   </main>;
 }
 
-function PlanView({ plan, busy, onAction, onReplanDay, changeError }: { plan: Plan; busy: boolean; onAction: MealAction; onReplanDay: (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentId: string | null) => Promise<void>; changeError: string }) {
+function PlanView({ plan, busy, onAction, onSearchEntertainment, onReplanDay, changeError }: { plan: Plan; busy: boolean; onAction: MealAction; onSearchEntertainment: (dayIndex: number, preference: string, query: string, selectedIds: string[]) => Promise<void>; onReplanDay: (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentIds: string[]) => Promise<void>; changeError: string }) {
   const [activeDay, setActiveDay] = useState(0);
   const [replacementNames, setReplacementNames] = useState<Record<string, string>>({});
-  const [entertainmentIds, setEntertainmentIds] = useState<Record<number, string>>({});
+  const [entertainmentIds, setEntertainmentIds] = useState<Record<number, string[]>>({});
+  const [entertainmentTypes, setEntertainmentTypes] = useState<Record<number, string>>({});
+  const [entertainmentQueries, setEntertainmentQueries] = useState<Record<number, string>>({});
+  const [venueChoices, setVenueChoices] = useState<Record<number, string>>({});
   useEffect(() => {
     setReplacementNames({});
-    setEntertainmentIds(Object.fromEntries(plan.entertainmentDays.map(item => [item.dayIndex, item.selectedId || ''])));
-  }, [plan.planId, plan.revision]);
+  }, [plan.planId]);
   const total = Object.values(plan.budget).reduce((a, b) => a + b, 0);
-  const labels: Record<string, string> = { transport: '交通', stay: '住宿', food: '餐饮', activities: '体验', buffer: '机动金' };
+  const labels: Record<string, string> = { transport: '交通建议上限', stay: '住宿建议上限', food: '餐饮建议上限', activities: '景点与娱乐建议上限', remaining: '剩余可用预算（未安排）' };
   const attachedNames = new Set(plan.days.flatMap(day => day.stops.map(stop => stop.name)));
   const generalTips = plan.food.tips.filter(tip => !attachedNames.has(tip.placeName) && !plan.food.meals.some(meal => meal.options.some(o => o.restaurant.name === tip.placeName)));
   const guide = plan.dayGuides[activeDay];
   const entertainment = plan.entertainmentDays[activeDay];
-  const entertainmentId = entertainmentIds[activeDay] ?? entertainment?.selectedId ?? '';
+  const entertainmentPreferences = [...new Set(plan.request.entertainmentPreferences.split(/[，,、;；\s]+/).filter(Boolean))];
+  const entertainmentType = entertainmentTypes[activeDay] || entertainmentPreferences[0] || '其他';
+  const entertainmentQuery = entertainmentQueries[activeDay] || '';
+  const entertainmentSelection = entertainmentIds[activeDay] ?? entertainment?.selectedIds ?? [];
+  const entertainmentOptions = entertainment?.options.filter(option => option.preference === entertainmentType) || [];
+  const venueChoice = venueChoices[activeDay] || '';
   const replacements = plan.days[activeDay]?.stops.filter(stop => stop.kind !== 'entertainment' && replacementNames[stop.id]?.trim()).map(stop => ({ stopId: stop.id, name: replacementNames[stop.id].trim() })) || [];
-  const dayDirty = replacements.length > 0 || entertainmentId !== (entertainment?.selectedId || '');
+  const dayDirty = replacements.length > 0 || entertainmentSelection.join('|') !== (entertainment?.selectedIds || []).join('|');
+  const selectedEntertainment = entertainmentSelection.map(id => entertainment?.options.find(option => option.id === id)).filter(Boolean);
+  const addEntertainment = () => {
+    if (!venueChoice) return;
+    setEntertainmentIds(current => {
+      const selected = current[activeDay] ?? entertainment?.selectedIds ?? [];
+      return selected.includes(venueChoice) || selected.length >= 3 ? current : { ...current, [activeDay]: [...selected, venueChoice] };
+    });
+    setVenueChoices(current => ({ ...current, [activeDay]: '' }));
+  };
   return <section className="result" aria-busy={busy}>
     <div className="section-head"><div><span className="eyebrow">03 / 旅行方案</span><h2>{plan.route.cityOrder.join(' → ')} · {plan.request.days} 天行程</h2><p className="route-origin">从 {plan.request.origin} 出发</p></div><small>更新于 {new Date(plan.sources.updatedAt).toLocaleString('zh-CN')}</small></div>
     <div className="notice">当前数据状态：AI {sourceName(plan.sources.ai)} · 景点地图 {sourceName(plan.sources.map)} · 天气 {sourceName(plan.sources.weather)} · 酒店 {sourceName(plan.sources.hotel)} · 小红书公开检索 {sourceName(plan.food.searchState)}。演示数据不代表实时地点或价格。</div>
@@ -143,13 +167,17 @@ function PlanView({ plan, busy, onAction, onReplanDay, changeError }: { plan: Pl
         </div><b>{stop.costPending ? '费用待确认' : `约 ¥${stop.cost}`}</b></div>
         {plan.food.meals.filter(meal => meal.slot.dayIndex === dayIndex && meal.slot.previous.id === stop.id).map(meal => <MealCard key={meal.slot.id} meal={meal} food={plan.food} busy={busy} onAction={onAction} />)}
       </Fragment>)}
-      <div className="day-editor"><span className="eyebrow">顺路娱乐活动</span><label>更换或删除当天娱乐活动<select value={entertainmentId} onChange={event => setEntertainmentIds(current => ({ ...current, [activeDay]: event.target.value }))}><option value="">不安排娱乐活动（删除）</option>{entertainment?.options.map(option => <option key={option.id} value={option.id}>{option.name} · 从 {entertainment.anchorName} 约 {option.routeMinutes ?? '待确认'} 分钟</option>)}</select></label>{entertainment?.warning && <p>{entertainment.warning}</p>}<button type="button" disabled={busy || !dayDirty} onClick={() => onReplanDay(activeDay, replacements, entertainmentId || null)}>{busy ? '正在核验地点并重新规划…' : '保存修改并重新规划当天路线'}</button><small>景点替换和娱乐更改会在点击此按钮后一次生效。</small></div>
+      <div className="day-editor"><span className="eyebrow">顺路娱乐活动</span><p>先选择想玩的类型，再按当天景区和餐饮路线查找具体地点。默认安排 1 个，也可继续添加，最多 3 个。</p>
+        <div className="entertainment-search"><label>娱乐项目<select aria-label="娱乐项目" value={entertainmentType} onChange={event => setEntertainmentTypes(current => ({ ...current, [activeDay]: event.target.value }))}>{entertainmentPreferences.map(item => <option key={item}>{item}</option>)}<option value="其他">其他</option></select></label><label>补充地点或区域（可选）<input value={entertainmentQuery} onChange={event => setEntertainmentQueries(current => ({ ...current, [activeDay]: event.target.value }))} maxLength={100} placeholder="如：西湖附近、某家酒馆" /></label><button className="secondary" type="button" disabled={busy || (entertainmentType === '其他' && entertainmentQuery.trim().length < 2)} onClick={() => onSearchEntertainment(activeDay, entertainmentType, entertainmentQuery.trim(), entertainmentSelection)}>{busy ? '正在查询…' : '按当天路线查找地点'}</button></div>
+        {!!entertainmentOptions.length && <div className="entertainment-add"><label>推荐的具体地点<select aria-label="推荐的具体地点" value={venueChoice} onChange={event => setVenueChoices(current => ({ ...current, [activeDay]: event.target.value }))}><option value="">请选择地点</option>{entertainmentOptions.map(option => <option key={option.id} value={option.id}>{option.name} · 从 {entertainment.anchorName} 约 {option.routeMinutes ?? '待确认'} 分钟</option>)}</select></label><button className="secondary" type="button" disabled={!venueChoice || entertainmentSelection.length >= 3} onClick={addEntertainment}>添加到当天草稿</button></div>}
+        {!!selectedEntertainment.length && <div className="entertainment-draft"><b>当天娱乐草稿</b>{selectedEntertainment.map(option => option && <div key={option.id}><span>{option.preference} · {option.name} · 约 {option.routeMinutes ?? '待确认'} 分钟</span><button type="button" className="text-button" onClick={() => setEntertainmentIds(current => ({ ...current, [activeDay]: entertainmentSelection.filter(id => id !== option.id) }))}>删除</button></div>)}</div>}
+        {entertainment?.warning && <p>{entertainment.warning}</p>}<button type="button" disabled={busy || !dayDirty} onClick={() => onReplanDay(activeDay, replacements, entertainmentSelection)}>{busy ? '正在核验地点并重新规划…' : '保存修改并重新规划当天路线'}</button><small>景点替换和娱乐更改会在点击此按钮后一次生效；检索本身不会立即改变路线。</small></div>
     </article>)}
       {!!generalTips.length && <div className="card"><span className="eyebrow">攻略参考 · 尚未匹配具体行程地点</span>{generalTips.map(tip => <SourceTip key={tip.id} tip={tip} food={plan.food} />)}</div>}
       {!!plan.food.sources.length && <details className="card"><summary>本次攻略来源（{plan.food.sources.length}）</summary>{plan.food.sources.map(source => <p key={source.id}>{source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> : source.title} · {source.kind === 'search' ? '搜索摘要' : '用户提供'} · 发布 {source.publishedAt || '未知'} · 查询 {new Date(source.queriedAt).toLocaleString('zh-CN')}</p>)}</details>}
     </div><aside className="sidebar">
       <FoodSummary plan={plan} />
-      <div className="card"><span className="eyebrow">全员预算分配 · 非已核验支出</span>{Object.entries(plan.budget).map(([key, value]) => <p className="line" key={key}><span>{labels[key]}</span><b>¥{value}</b></p>)}<p className="line total"><span>合计（{plan.request.travelers} 人）</span><b>¥{total}</b></p></div>
+      <div className="card"><span className="eyebrow">全员预算建议 · 按主要交通调整</span>{Object.entries(plan.budget).map(([key, value]) => <p className="line" key={key}><span>{labels[key] || key}</span><b>¥{value}</b></p>)}<p className="line total"><span>合计（{plan.request.travelers} 人）</span><b>¥{total}</b></p><div className="budget-explanation"><b>{plan.budgetMeta.transportMode}：已知路线交通约 ¥{plan.budgetMeta.knownTransportCost}</b><p>{plan.budgetMeta.rule}</p>{plan.budgetMeta.pendingLegs > 0 && <small>另有 {plan.budgetMeta.pendingLegs} 段价格或路线待确认，以上不是最终支出。</small>}<p>“剩余可用预算”只是尚未分配的钱，不再使用含义不清的“机动金”。</p></div></div>
       <div className="card"><span className="eyebrow">全程风险提示</span><ul>{plan.risks.map(r => <li key={r}>{r}</li>)}</ul></div>
     </aside></div>
   </section>;

@@ -103,6 +103,14 @@
 .day-editor { display: grid; gap: 11px; margin: 15px 0 0; padding: 17px; background: #eaf0e7; border: 1px solid #bfcfc0; border-radius: 11px; }
 .day-editor p, .day-editor small { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .day-editor button { width: fit-content; }
+.entertainment-search, .entertainment-add { display: grid; grid-template-columns: minmax(140px, .7fr) minmax(220px, 1.3fr) auto; gap: 10px; align-items: end; }
+.entertainment-search button, .entertainment-add button { margin-bottom: 1px; }
+.entertainment-draft { display: grid; gap: 7px; padding: 11px; background: #fffdf8; border-radius: 8px; }
+.entertainment-draft > div { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding-top: 7px; border-top: 1px solid var(--line); }
+.text-button { padding: 0 !important; color: #9c412e; background: transparent !important; border: 0; }
+.image-source { display: block; margin: -6px 0 10px; color: var(--muted); }
+.budget-explanation { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.budget-explanation p, .budget-explanation small { color: var(--muted); font-size: 11px; line-height: 1.55; }
 .confirmation-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .confirmation-actions button { width: auto; }
 .preference-checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
@@ -117,6 +125,7 @@
   .map-stage { min-height: 300px; }
   .amap-container { height: 440px; }
   .day-guide { grid-template-columns: 1fr; }
+  .entertainment-search, .entertainment-add { grid-template-columns: 1fr; }
   .candidate-grid { grid-template-columns: 1fr; }
 }
 
