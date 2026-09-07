@@ -26,7 +26,8 @@ export async function fixtureFetch(input, options = {}) {
     if (url.pathname.includes('/geocode/geo')) {
       const name = url.searchParams.get('address');
       const coordinates = { 上海: '121.4737,31.2304', 杭州: '120.1551,30.2741', 北京: '116.4074,39.9042', 成都: '104.0665,30.5723' };
-      return reply({ status: '1', geocodes: [{ formatted_address: `${name}（测试）`, location: coordinates[name] || '113.2644,23.1291' }] });
+      const citycodes = { 上海: '021', 杭州: '0571', 北京: '010', 成都: '028' };
+      return reply({ status: '1', geocodes: [{ formatted_address: `${name}（测试）`, location: coordinates[name] || '113.2644,23.1291', citycode: citycodes[name] || '020' }] });
     }
     if (url.pathname.includes('/place/')) {
       if (url.searchParams.get('types') === '050000') return reply({ status: '1', pois: Array.from({ length: 6 }, (_, i) => poi(i)) });
@@ -41,7 +42,7 @@ export async function fixtureFetch(input, options = {}) {
     const lngs = [url.searchParams.get('origin'), url.searchParams.get('destination')].map(s => Number(s.split(',')[0]));
     const index = lngs.map(lng => Math.round((lng - 120.101) * 1000)).find(i => i >= 0 && i < 6);
     const duration = (index === undefined ? 10 : [8, 12, 6, 8, 8, 50][index]) * 60;
-    const path = { duration: String(duration), distance: '600', cost: '2', tolls: '0' };
+    const path = { duration: String(duration), distance: '600', cost: { duration: String(duration), transit_fee: '2', tolls: '0' }, tolls: '0', steps: [{ polyline: `${url.searchParams.get('origin')};${url.searchParams.get('destination')}` }] };
     return reply({ status: '1', route: { paths: [path], transits: [path] } });
   }
   if (url.hostname === 'store.is.autonavi.com') {

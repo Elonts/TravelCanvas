@@ -40,6 +40,14 @@ test('missing or empty price, route, fare and hours never satisfy constraints', 
   assert.equal(evaluate(restaurant, slot, request, [{ ...leg(0), minutes: null, state: 'pending' }]).eligible, false);
   assert.equal(evaluate(restaurant, slot, request, [leg(5, null), leg(5)], leg(5)).eligible, false);
 });
+test('unknown data is explicitly acceptible while hard conflicts remain blocked', () => {
+  const unknown = evaluate({ ...restaurant, price: null, hours: '' }, slot, request, [{ ...leg(0), state: 'pending', minutes: null }]);
+  assert.equal(unknown.eligible, false); assert.equal(unknown.canAcceptPending, true);
+  const conflict = evaluate({ ...restaurant, price: { low: 9999, high: 9999 } }, slot, request);
+  assert.equal(conflict.canAcceptPending, true); assert.equal(conflict.hardBlocked, false); assert.ok(conflict.reasons.length);
+  const allergy = evaluate({ ...restaurant, name: '牛肉面馆' }, slot, { ...request, dietary: '不吃牛肉' });
+  assert.equal(allergy.canAcceptPending, false); assert.equal(allergy.hardBlocked, true);
+});
 test('opening ranges cover entire meal and parse overnight conservatively', () => {
   assert.equal(isOpenDuring('10:00-14:00;17:00-22:00', 720, 800), true);
   assert.equal(isOpenDuring('10:00-12:30', 720, 800), false);

@@ -40,7 +40,10 @@ try {
         await page.getByRole('button', { name: /用已选地点生成路线/ }).click();
         await page.locator('.result').waitFor({ timeout: 60000 });
         await page.locator('.route-map').waitFor();
-        assert.ok(await page.locator('.map-marker').count() >= 3);
+        assert.ok(await page.locator('.map-point-list button').count() >= 3);
+        assert.ok((await page.locator('.map-fallback').innerText()).includes('未配置高德 JS Key'));
+        assert.equal(await page.locator('.day-tabs button').count(), 1);
+        assert.ok(await page.locator('.day-guide').count() === 1);
         assert.ok(await page.getByRole('link', { name: /在高德地图打开并导航/ }).count() >= 3);
         const firstNavigation = await page.getByRole('link', { name: /在高德地图打开并导航/ }).first().getAttribute('href');
         assert.ok(firstNavigation.startsWith('https://uri.amap.com/navigation?'));

@@ -16,9 +16,12 @@ export { requestSchema };
 export type TripRequest = z.infer<typeof requestSchema>;
 export type DataState = 'live' | 'demo' | 'pending';
 type HotelRecommendation = { id: string; title: string; area: string; rationale: string; filters: string; priceGuide: string; ctripUrl: string; query: string };
-export type RoutePoint = { id: string; order: number; name: string; city: string; date: string; time: string; kind: 'origin' | 'attraction' | 'restaurant'; lng: number; lat: number; verified: boolean };
-export type RouteOverview = { points: RoutePoint[]; transfers: (RouteLeg & { transport: 'transit' | 'drive' })[]; cityOrder: string[]; source: '高德地图' | '顺序示意'; state: DataState; queriedAt: string; note: string };
-export type Plan = { planId?: string; revision?: number; food: FoodPlan; request: TripRequest; days: Day[]; route: RouteOverview; budget: Record<string, number>; weather: { city: string; date: string; summary: string; high: number; low: number; rain: number; state: DataState; updatedAt: string }; hotels: HotelRecommendation[]; sources: { ai: DataState; map: DataState; weather: DataState; hotel: DataState; updatedAt: string }; risks: string[] };
+export type RoutePoint = { id: string; order: number; name: string; city: string; date: string; time: string; kind: 'origin' | 'attraction' | 'entertainment' | 'restaurant'; lng: number; lat: number; verified: boolean; poiId?: string; address: string; introduction: string; imageUrl: string | null; navigationUrl: string | null };
+export type RoutePath = RouteLeg & { fromId: string; toId: string; date: string; transport: 'walk' | 'transit' | 'drive' };
+export type RouteOverview = { points: RoutePoint[]; paths: RoutePath[]; transfers: (RouteLeg & { transport: 'transit' | 'drive' })[]; cityOrder: string[]; source: '高德地图' | '顺序示意'; state: DataState; queriedAt: string; note: string };
+type Weather = { city: string; date: string; summary: string; high: number; low: number; rain: number; state: DataState; updatedAt: string };
+export type DayGuide = { date: string; city: string; weather: Weather; hotels: HotelRecommendation[]; reminders: string[] };
+export type Plan = { planId?: string; revision?: number; food: FoodPlan; request: TripRequest; days: Day[]; route: RouteOverview; budget: Record<string, number>; weather: Weather; hotels: HotelRecommendation[]; dayGuides: DayGuide[]; sources: { ai: DataState; map: DataState; weather: DataState; hotel: DataState; updatedAt: string }; risks: string[] };
 
 type MapProvider = ReturnType<typeof createMapProvider>;
 type GeoPoint = { name: string; address: string; lng: number; lat: number; verified: boolean };
@@ -57,7 +60,7 @@ async function aiCandidateNames(request: TripRequest, destination: string, days:
   try {
     const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST', signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash', response_format: { type: 'json_object' }, messages: [{ role: 'system', content: '你是中国境内旅行规划助手。只输出 JSON。' }, { role: 'user', content: `为${destination}的${days}天旅行推荐 ${count} 个互不重复、可在高德地图检索的正式景点、博物馆或公园名称。按相邻片区组织候选，避免同一景点不同入口、别名重复，不用餐厅或餐饮街代替正餐。偏好：${request.preferences || '综合体验'}；限制：${request.constraints || '无'}。返回 {"places":["名称"]}，不要写泛称。` }] })
+      body: JSON.stringify({ model: process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash', thinking: { type: 'disabled' }, max_tokens: 1200, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: '你是中国境内旅行规划助手。只输出 JSON。' }, { role: 'user', content: `为${destination}的${days}天旅行推荐 ${count} 个互不重复、可在高德地图检索的正式景点、博物馆或公园名称。按相邻片区组织候选，避免同一景点不同入口、别名重复，不用餐厅或餐饮街代替正餐。偏好：${request.preferences || '综合体验'}；限制：${request.constraints || '无'}。返回 {"places":["名称"]}，不要写泛称。` }] })
     });
     const content = (await response.json()).choices?.[0]?.message?.content;
     const places = parseCandidatePlaces(content || '{}', fallback, count).map((stop: Stop) => ({ ...stop, city: destination }));
@@ -90,17 +93,30 @@ async function transferRoutes(request: TripRequest, map: MapProvider | null, ori
 function selectedStops(candidates: DiscoveryCandidate[], city: string): Stop[] {
   return candidates.filter((candidate): candidate is DiscoveryCandidate & { kind: 'attraction' | 'entertainment' } => candidate.city === city && candidate.kind !== 'food').map(candidate => ({
     id: `selected-${candidate.poiId}`, poiId: candidate.poiId, city, kind: candidate.kind, name: candidate.name, address: candidate.address,
-    lng: candidate.lng, lat: candidate.lat, verified: true, navigationUrl: candidate.navigationUrl, time: '', detail: `${candidate.introduction} 推荐理由：${candidate.recommendationReason}`,
+    lng: candidate.lng, lat: candidate.lat, verified: true, navigationUrl: candidate.navigationUrl, imageUrl: candidate.imageUrl, time: '', detail: `${candidate.introduction} 推荐理由：${candidate.recommendationReason}`,
     duration: `约 ${Math.round(candidate.durationMinutes / 30) / 2} 小时`, durationMinutes: candidate.durationMinutes,
     cost: candidate.estimatedCost || 0, costPending: candidate.estimatedCost === null, indoor: candidate.kind === 'entertainment',
   }));
+}
+
+async function routePaths(points: RoutePoint[], map: MapProvider | null, transport: TripRequest['transport']): Promise<RoutePath[]> {
+  if (!map) return [];
+  const paths: RoutePath[] = [];
+  for (let index = 1; index < points.length; index++) {
+    const from = points[index - 1], to = points[index];
+    if (from.date !== to.date && from.kind !== 'origin') continue;
+    const leg = await map.route(from, to, transport, from.city, to.city);
+    paths.push({ ...leg, fromId: from.id, toId: to.id, date: to.date, transport });
+  }
+  return paths;
 }
 
 function selectedFood(candidates: DiscoveryCandidate[]) {
   return candidates.filter(candidate => candidate.kind === 'food').map(candidate => ({
     id: candidate.poiId, city: candidate.city, preferred: true, name: candidate.name, address: candidate.address, lng: candidate.lng, lat: candidate.lat,
     category: candidate.category, price: candidate.price, hours: candidate.hours, source: candidate.source, queriedAt: candidate.queriedAt,
-    imageUrl: candidate.imageUrl, navigationUrl: candidate.navigationUrl, tips: candidate.evidence.map((evidence, index) => ({ id: `discovery-tip-${index}`, sourceId: evidence.sourceId, placeName: candidate.name, text: evidence.quote, quote: evidence.quote, category: 'food' as const, state: 'pending' as const })),
+    imageUrl: candidate.imageUrl, navigationUrl: candidate.navigationUrl, tips: candidate.evidence.map((evidence, index) => ({ id: `discovery-tip-${index}`, sourceId: evidence.sourceId, placeName: candidate.name, text: evidence.quote, quote: evidence.quote, dishes: evidence.dishes, category: 'food' as const, state: 'pending' as const })),
+    featuredDishes: candidate.featuredDishes || [],
   }));
 }
 
@@ -143,14 +159,19 @@ export async function buildPlan(request: TripRequest, selected: DiscoveryCandida
   const selectedSources = selected ? discoverySources(selected) : [];
   const reusedSources = selectedSources.length ? selectedSources : null;
   const buildSelectedFoodPlan = buildFoodPlan as unknown as (request: TripRequest, days: Day[], budget: Record<string, number>, env: NodeJS.ProcessEnv, fetcher: typeof fetch, options: { mapIntervalMs: number; preferredRestaurants: ReturnType<typeof selectedFood>; discoverySources: ReturnType<typeof discoverySources> | null }) => Promise<FoodPlan>;
-  const [weatherData, food] = await Promise.all([weather(primaryCity, days[0].date), buildSelectedFoodPlan(request, days, budget, process.env, fetch, { mapIntervalMs: testMapInterval, preferredRestaurants, discoverySources: reusedSources })]);
+  const [dailyWeather, food] = await Promise.all([Promise.all(days.map(day => weather(day.city, day.date))), buildSelectedFoodPlan(request, days, budget, process.env, fetch, { mapIntervalMs: testMapInterval, preferredRestaurants, discoverySources: reusedSources })]);
+  const weatherData = dailyWeather[0] || await weather(primaryCity, request.startDate);
   const transfers = await transferRoutes(request, map, orderedCities.origin, orderedCities.destinations);
-  const routeState: DataState = map && orderedCities.state === 'live' && transfers.every(leg => leg.state === 'live') ? 'live' : 'pending';
+  const points = createRoutePoints(orderedCities.origin, request, days, food);
+  const paths = await routePaths(points, map, request.transport);
+  const routeState: DataState = map && orderedCities.state === 'live' && transfers.every(leg => leg.state === 'live') && paths.every(leg => leg.state === 'live') ? 'live' : 'pending';
   const route: RouteOverview = {
-    points: createRoutePoints(orderedCities.origin, request, days, food), transfers, cityOrder: orderedCities.destinations.map(item => item.name),
+    points, paths, transfers, cityOrder: orderedCities.destinations.map(item => item.name),
     source: map ? '高德地图' : '顺序示意', state: routeState, queriedAt: new Date().toISOString(),
     note: map ? '城市顺序按出发地与城市坐标减少明显折返；点位连线表示访问顺序，实际道路与耗时以高德查询结果为准。' : '未配置高德地图，保留用户选择顺序；地图仅显示已有坐标的访问顺序。',
   };
   const destinationLabel = route.cityOrder.join('、');
-  return { request, days, route, budget, food, weather: weatherData, hotels: recommendHotels({ destination: destinationLabel, days: request.days, budget: Object.values(budget).reduce((a, b) => a + b, 0), travelers: request.travelers, preferences: request.preferences || '', stops: orderedStops }), sources: { ai: stateOf(aiStates), map: stateOf(mapStates), weather: weatherData.state, hotel: 'demo', updatedAt: new Date().toISOString() }, risks: ['多城市顺序采用就近启发式减少明显折返，不等于承诺全程最短；跨城交通方式和班次仍需确认。', '门票、营业时间与预约规则可能变动，请在出发前确认。', '酒店推荐按路线与预算计算，不包含实时房态或价格；请以携程页面为准。', '餐饮价格为高德人均参考上下浮动 20% 的估算；餐厅营业和帖子经验仍需出发前确认。', '餐饮路线为当前查询估算；驾车新增费用按每车 15 元起计加每公里 3 元及路段收费估算，4 人一车。晚餐不包含返回酒店。', weatherData.rain >= 50 ? '首站降雨概率较高，建议优先选择室内活动。' : '建议保留至少 10% 机动预算应对价格变化。'] };
+  const hotels = recommendHotels({ destination: destinationLabel, days: request.days, budget: Object.values(budget).reduce((a, b) => a + b, 0), travelers: request.travelers, preferences: request.preferences || '', stops: orderedStops });
+  const dayGuides = days.map((day, index) => ({ date: day.date, city: day.city, weather: dailyWeather[index], hotels: recommendHotels({ destination: day.city, days: 1, budget: Object.values(budget).reduce((a, b) => a + b, 0) / request.days, travelers: request.travelers, preferences: request.preferences || '', stops: day.stops }), reminders: [dailyWeather[index].rain >= 50 ? '降水概率较高，带伞并优先保留室内备选。' : '天气适合按计划出行，仍建议准备防晒和饮水。', day.stops.some(stop => !stop.indoor) ? '当天包含户外地点，请穿舒适鞋并留意温差。' : '当天以室内活动为主，留意预约与入场时间。', day.stops.some(stop => stop.kind === 'entertainment') ? '夜间娱乐请提前确认营业时间、年龄限制与返程方式。' : '相邻地点已按少折返排序，实时路况仍以高德为准。'] }));
+  return { request, days, route, budget, food, weather: weatherData, hotels, dayGuides, sources: { ai: stateOf(aiStates), map: stateOf(mapStates), weather: stateOf(dailyWeather.map(item => item.state)), hotel: 'demo', updatedAt: new Date().toISOString() }, risks: ['多城市顺序采用就近启发式减少明显折返，不等于承诺全程最短；跨城交通方式和班次仍需确认。', '门票、营业时间与预约规则可能变动，请在出发前确认。', '酒店推荐按路线与预算计算，不包含实时房态或价格；请以携程页面为准。', '餐饮价格为高德人均参考上下浮动 20% 的估算；餐厅营业和帖子经验仍需出发前确认。', '餐饮路线为当前查询估算；驾车新增费用按每车 15 元起计加每公里 3 元及路段收费估算，4 人一车。晚餐不包含返回酒店。', weatherData.rain >= 50 ? '首站降雨概率较高，建议优先选择室内活动。' : '建议保留至少 10% 机动预算应对价格变化。'] };
 }

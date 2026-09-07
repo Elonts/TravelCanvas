@@ -40,6 +40,9 @@ for (const mode of ['fixtures', 'offline']) {
     assert.equal(plan.food.meals.length, 2); assert.ok(plan.planId);
     assert.ok(plan.days.flatMap(day => day.stops).every(stop => stop.navigationUrl));
     assert.equal(plan.food.summary.unresolved, 0);
+    assert.equal(plan.dayGuides.length, plan.days.length);
+    assert.ok(plan.route.paths.length > 0);
+    assert.ok(plan.route.paths.every(path => path.state === 'live'));
     const originalStops = structuredClone(plan.days);
     const mealId = plan.food.meals[0].slot.id;
     if (plan.food.meals[0].locked) {

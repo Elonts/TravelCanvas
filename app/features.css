@@ -26,12 +26,18 @@
 .map-days button { padding: 7px 11px; font-size: 11px; }
 .map-days .active { background: var(--green); }
 .map-stage { position: relative; min-height: 340px; overflow: hidden; background: #edf2ed; border-radius: 13px; }
-.map-stage svg { display: block; width: 100%; height: clamp(340px, 45vw, 530px); }
+.amap-container { width: 100%; height: clamp(420px, 52vw, 610px); }
+.amap-order-marker { display: grid; width: 36px; height: 36px; padding: 0; color: white; font-weight: 800; background: var(--green); border: 3px solid white; border-radius: 50% 50% 50% 8px; box-shadow: 0 4px 12px #18322e55; transform: rotate(-45deg); place-items: center; }
+.amap-order-marker span { transform: rotate(45deg); }
+.map-fallback { position: absolute; inset: 0; display: grid; padding: 40px; background: #edf2ed; place-content: center; text-align: center; }
+.map-fallback p { max-width: 520px; color: var(--muted); }
 .map-marker { cursor: pointer; outline: none; }
 .map-marker circle { transition: transform .15s; }
 .map-marker:hover circle, .map-marker:focus circle, .map-marker.selected circle { transform: scale(1.18); }
 .map-marker text { fill: white; font-size: 16px; font-weight: 800; pointer-events: none; }
-.map-popover { position: absolute; bottom: 16px; left: 16px; max-width: min(380px, calc(100% - 32px)); padding: 12px 15px; pointer-events: none; background: #fffdf8ef; border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 8px 28px #18322e26; backdrop-filter: blur(8px); }
+.map-popover { position: absolute; bottom: 16px; left: 16px; max-width: min(540px, calc(100% - 32px)); padding: 12px 15px; background: #fffdf8f5; border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 8px 28px #18322e26; backdrop-filter: blur(8px); }
+.map-place-detail { display: grid; grid-template-columns: 110px 1fr; gap: 12px; }
+.map-place-detail > img { width: 110px; height: 110px; object-fit: cover; border-radius: 7px; }
 .map-popover b { display: flex; gap: 8px; align-items: center; font-size: 14px; }
 .map-popover b span { display: grid; width: 22px; height: 22px; color: white; font-size: 11px; background: var(--green); border-radius: 50%; place-items: center; }
 .map-popover p, .map-popover small { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
@@ -76,6 +82,19 @@
 .selection-bar button { width: auto; white-space: nowrap; }
 .nav-link { display: inline-flex; margin-top: 9px; color: var(--green); font-size: 12px; font-weight: 800; }
 .restaurant-image { width: 100%; max-height: 260px; margin-bottom: 12px; object-fit: cover; border-radius: 8px; }
+.day-tabs { display: flex; gap: 8px; margin-bottom: 14px; overflow-x: auto; }
+.day-tabs button { flex: 0 0 auto; width: auto; }
+.day-tabs .active { background: var(--green); }
+.day-guide { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.day-guide > div { padding: 14px; background: #f2f4ef; border-radius: 9px; }
+.day-guide h4 { margin: 5px 0; }
+.day-guide p, .day-guide li { font-size: 12px; }
+.day-guide ul { padding-left: 18px; }
+.confirmation-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.confirmation-actions button { width: auto; }
+.preference-checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.preference-checks label { display: flex; width: auto; gap: 6px; align-items: center; font-size: 13px; }
+.preference-checks input { width: auto; }
 
 @media (max-width: 760px) {
   .destination-field { grid-column: auto; }
@@ -83,7 +102,8 @@
   .route-map { padding: 13px; }
   .map-title { align-items: start; }
   .map-stage { min-height: 300px; }
-  .map-stage svg { height: 340px; }
+  .amap-container { height: 440px; }
+  .day-guide { grid-template-columns: 1fr; }
   .candidate-grid { grid-template-columns: 1fr; }
 }
 
@@ -94,6 +114,8 @@
   .map-title { display: grid; }
   .map-controls { justify-content: end; }
   .map-popover { bottom: 9px; left: 9px; max-width: calc(100% - 18px); }
+  .map-place-detail { grid-template-columns: 1fr; }
+  .map-place-detail > img { width: 100%; height: 120px; }
   .candidate-card { grid-template-columns: 1fr; }
   .candidate-image { min-height: 190px; max-height: 240px; }
   .selection-bar { align-items: stretch; flex-direction: column; }

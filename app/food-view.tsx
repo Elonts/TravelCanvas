@@ -24,8 +24,9 @@ function RestaurantOption({ option, food, label, children }: { option: MealOptio
     {restaurant.imageUrl && <img className="restaurant-image" src={restaurant.imageUrl} alt={`${restaurant.name}的高德地点图片`} loading="lazy" />}
     <span className="eyebrow">{label}</span>
     <h4>{restaurant.name}</h4><p className="address">{restaurant.address}</p>
-    <div className="tags"><span>具体地点已核验</span><span>{restaurant.category}</span><span>{option.eligible ? '按参考数据满足约束' : '未安排 · 待确认/不符合条件'}</span></div>
+    <div className="tags"><span>具体地点已核验</span><span>{restaurant.category}</span><span>{restaurant.preferred ? '用户已选择' : option.eligible ? '按参考数据满足约束' : option.canAcceptPending ? '可接受待确认后安排' : '存在明确冲突'}</span></div>
     <p>{option.explanation}</p>
+    <p><b>招牌菜 / 特色菜：</b>{restaurant.featuredDishes?.length ? restaurant.featuredDishes.join('、') : '公开笔记暂未提取到可定位菜名，建议查看菜单或向门店确认'}</p>
     <dl className="meal-facts">
       <div><dt>预计人均</dt><dd>{restaurant.price ? `¥${restaurant.price.low}–${restaurant.price.high}` : '价格待确认'}</dd></div>
       <div><dt>全员本餐</dt><dd>{option.totalHigh !== null ? `¥${option.totalLow}–${option.totalHigh}` : '预算待确认'}</dd></div>
@@ -56,16 +57,16 @@ export function MealCard({ meal, food, busy, onAction }: { meal: Meal; food: Foo
   return <section className="meal" aria-label={`${meal.slot.date}${meal.slot.label}`}>
     <div className="meal-heading"><div><span className="eyebrow">本次行程推荐 · {meal.slot.label}</span><h3>{meal.slot.previous.name}之后，安排一顿好饭</h3></div>{meal.locked && <span className="lock-badge">已锁定</span>}</div>
     <p className="meal-context">{clockTime(meal.slot.earliest)}–{clockTime(meal.slot.latest)} · 全员本餐上限 ¥{meal.slot.foodLimit} · 新增交通预留 ¥{meal.slot.transportLimit}<br />{meal.slot.next ? `下一站：${meal.slot.next.name}（${meal.slot.next.time}）` : '当天最后一站后用餐，未计返回酒店行程'}</p>
-    {selected ? <RestaurantOption option={selected} food={food} label="主选餐厅">
+    {selected ? <RestaurantOption option={selected} food={food} label={selected.restaurant.preferred ? '用户已选餐厅 · 已放入路线' : '主选餐厅'}>
       <div className="meal-actions">
         <button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'cheaper')}>更省钱</button>
         <button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'closer')}>更顺路</button>
         <button type="button" className="secondary" disabled={busy} onClick={() => onAction(meal.slot.id, 'lock')}>{meal.locked ? '解锁餐厅' : '锁定这家'}</button>
       </div>
     </RestaurantOption> : <div className="empty-meal"><b>暂未安排餐厅</b><p>{meal.options.length ? '已找到以下具体门店，但尚未同时满足所有条件。请查看费用、路线和待确认项；未选中的门店不计入已安排预算。' : '尚无已核验的门店和路线。地图查询暂不可用或该行程地点未确认，请稍后重试。'}</p></div>}
-    {visibleSuggestions.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label={option.reasons.length ? '具体门店 · 当前条件不匹配' : '具体门店建议 · 需确认后安排'} />)}
+    {visibleSuggestions.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label={option.reasons.length ? '具体门店 · 当前条件不匹配' : '具体门店建议 · 需确认后安排'}>{option.canAcceptPending && <div className="confirmation-actions"><button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'select', option.restaurant.id)}>接受待确认并安排</button></div>}</RestaurantOption>)}
     {!!alternatives.length && <details className="alternatives"><summary>备选餐厅（{alternatives.length}）</summary>{alternatives.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label="可选替代"><button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'select', option.restaurant.id)}>选择这家并重算</button></RestaurantOption>)}</details>}
-    {!!remainingPending.length && <details className="alternatives"><summary>查看其他待确认或不符合条件的候选（{remainingPending.length}）</summary>{remainingPending.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label="未入选候选" />)}</details>}
+    {!!remainingPending.length && <details className="alternatives"><summary>查看其他待确认或不符合条件的候选（{remainingPending.length}）</summary>{remainingPending.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label="未入选候选">{option.canAcceptPending && <div className="confirmation-actions"><button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'select', option.restaurant.id)}>接受待确认并安排</button></div>}</RestaurantOption>)}</details>}
   </section>;
 }
 

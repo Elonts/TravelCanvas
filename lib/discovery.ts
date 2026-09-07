@@ -18,9 +18,9 @@ async function aiSuggestions(request: TripRequest, city: string) {
   try {
     const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST', signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash', response_format: { type: 'json_object' }, messages: [
+      body: JSON.stringify({ model: process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash', thinking: { type: 'disabled' }, max_tokens: 1600, response_format: { type: 'json_object' }, messages: [
         { role: 'system', content: '你是中国境内旅行候选发现助手，只输出 JSON。地点名称必须具体、可在高德检索。你的内容只是建议，不能编造实时营业、门票、价格或安全信息。' },
-        { role: 'user', content: `为${city}推荐 4 个景区和 3 个娱乐项目。旅行偏好：${request.preferences || '综合体验'}；旅行限制：${request.constraints || '无'}。返回 {"attractions":[{"name":"正式名称","reason":"与偏好或限制的关系"}],"entertainment":[{"name":"正式名称","reason":"与偏好或限制的关系"}]}。娱乐项目可以是演出、剧场、游乐园、文化体验或适合该用户的休闲场所，不要返回餐厅。` },
+        { role: 'user', content: `为${city}推荐 4 个景区和 6 个娱乐项目。旅行偏好：${request.preferences || '综合体验'}；娱乐偏好：${request.entertainmentPreferences || '台球、足浴、剧本杀、酒馆、本地演出与文化体验'}；旅行限制：${request.constraints || '无'}。返回 {"attractions":[{"name":"正式名称","reason":"与偏好或限制的关系"}],"entertainment":[{"name":"正式名称","reason":"与偏好、景区片区或限制的关系"}]}。娱乐项目应包含用户勾选的类型，并尽量选择景区周边具体分店；不要返回餐厅。` },
       ] }),
     });
     if (!response.ok) throw Error('model unavailable');
@@ -32,7 +32,7 @@ async function aiSuggestions(request: TripRequest, city: string) {
 function evidenceFor(name: string, tips: Awaited<ReturnType<typeof extractTips>>, sources: Awaited<ReturnType<typeof searchNotes>>['sources']): DiscoveryEvidence[] {
   return tips.filter(tip => normalize(tip.placeName) === normalize(name)).map(tip => {
     const source = sources.find(item => item.id === tip.sourceId)!;
-    return { sourceId: source.id, title: source.title, url: source.url, quote: tip.quote, publishedAt: source.publishedAt, queriedAt: source.queriedAt };
+    return { sourceId: source.id, title: source.title, url: source.url, quote: tip.quote, dishes: tip.dishes, publishedAt: source.publishedAt, queriedAt: source.queriedAt };
   }).filter(item => item.title).slice(0, 5);
 }
 
@@ -56,7 +56,7 @@ function makeCandidate(place: any, kind: DiscoveryCandidate['kind'], request: Tr
     estimatedCost: kind === 'food' ? place.price?.high ?? null : null, price: place.price, hours: place.hours,
     introduction: evidence[0]?.quote || `${place.category} · ${place.address || `${place.city}，详细地址待确认`}`,
     recommendationReason: reason, source: kind === 'food' && evidence.length ? '高德地图 POI + 小红书公开笔记' : '高德地图 POI',
-    queriedAt: new Date().toISOString(), verified: true, navigationUrl: place.navigationUrl, evidence, evidenceScore: score,
+    queriedAt: new Date().toISOString(), verified: true, navigationUrl: place.navigationUrl, evidence, evidenceScore: score, featuredDishes: [...new Set(evidence.flatMap(item => item.dishes || []))],
   };
 }
 
@@ -84,10 +84,19 @@ export async function discoverCandidates(request: TripRequest) {
     const [attractions, food, entertainment] = await Promise.all([
       map.discover(city, 'attraction', suggestion.attractions.map(item => item.name), 6, request.transport),
       map.discover(city, 'food', foodNames, 6, request.transport),
-      map.discover(city, 'entertainment', suggestion.entertainment.map(item => item.name), 5, request.transport),
+      map.discover(city, 'entertainment', [...suggestion.entertainment.map(item => item.name), ...(request.entertainmentPreferences || '台球 足浴 剧本杀 酒馆').split(/[，,、\s]+/).filter(Boolean)], 10, request.transport),
     ]);
+    const targetedSearch = food.length ? await searchNotes({ ...request, destinations: [city], verifiedFoodNames: food.map(place => place.name) }, []) : { sources: [], warnings: [], state: 'pending' as const };
+    const targetedSources = targetedSearch.sources.map(source => ({ ...source, id: `${city}:targeted:${source.id}` }));
+    sources.push(...targetedSources);
+    warnings.push(...targetedSearch.warnings.map(warning => `${city}精准分店检索：${warning}`));
+    // If the model extractor is unavailable, exact full branch names from the
+    // already verified AMap pool can still recover literal source excerpts.
+    const targetedTips = await extractTips(targetedSources, food.map(place => place.name));
+    const literalFoodTips = await extractTips([...searches[index].sources, ...targetedSources], food.map(place => place.name), {} as NodeJS.ProcessEnv, fetch);
+    const verifiedTips = [...cityTips, ...targetedTips, ...literalFoodTips].filter((tip, tipIndex, all) => all.findIndex(other => other.sourceId === tip.sourceId && other.quote === tip.quote) === tipIndex);
     candidates.push(...attractions.map(place => makeCandidate(place, 'attraction', request, reasons, cityTips, sources)));
-    candidates.push(...food.map(place => makeCandidate(place, 'food', request, reasons, cityTips, sources)).sort((a, b) => b.evidenceScore - a.evidenceScore));
+    candidates.push(...food.map(place => makeCandidate(place, 'food', request, reasons, verifiedTips, sources)).sort((a, b) => b.evidenceScore - a.evidenceScore));
     candidates.push(...entertainment.map(place => makeCandidate(place, 'entertainment', request, reasons, cityTips, sources)));
     mapStates.push(attractions.length && food.length && entertainment.length ? 'live' : 'pending');
   }

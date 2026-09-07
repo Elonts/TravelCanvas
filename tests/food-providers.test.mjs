@@ -10,13 +10,25 @@ test('only valid HTTPS note URLs are accepted, including genuine share links', (
   assert.ok(safeSourceUrl('https://xhslink.com/a/test'));
 });
 test('automatic search restricts domain, validates result URLs and deduplicates', async () => {
+  let calls = 0;
   const result = await searchNotes(request, days[0].stops, testEnv, async (url, options) => {
+    calls++;
     assert.equal(url, 'https://api.tavily.com/search');
     const body = JSON.parse(options.body); assert.deepEqual(body.include_domains, ['xiaohongshu.com']); assert.ok(body.query.includes('杭州'));
+    assert.equal(body.search_depth, 'advanced'); assert.equal(body.chunks_per_source, 3);
     assert.ok(options.signal); assert.equal(options.redirect, 'error');
     return new Response(JSON.stringify({ results: [{ title: 'A', url: 'https://www.xiaohongshu.com/explore/abc123?token=one', content: '正文' }, { title: 'A', url: 'https://www.xiaohongshu.com/explore/abc123?token=two', content: '正文' }, { title: '伪造', url: 'https://evil.test', content: '正文' }] }));
   });
+  assert.equal(calls, 3);
   assert.equal(result.sources.length, 1); assert.equal(result.sources[0].publishedAt, null);
+});
+test('verified restaurant names use one focused advanced follow-up query', async () => {
+  let calls = 0;
+  await searchNotes({ ...request, verifiedFoodNames: ['测试江南餐厅（西湖店）', '测试面馆（西湖店）'] }, [], testEnv, async (_url, options) => {
+    calls++; const body = JSON.parse(options.body); assert.ok(body.query.includes('测试江南餐厅（西湖店）')); assert.equal(body.search_depth, 'advanced');
+    return new Response('{"results":[]}');
+  });
+  assert.equal(calls, 1);
 });
 test('no keys, failed search, empty results and user text degrade without invented notes', async () => {
   const noKeys = await searchNotes({ ...request, noteText: '用户正文' }, [], {}, () => assert.fail('must not fetch'));
@@ -45,6 +57,14 @@ test('POI parsing rejects malformed location/category, empty prices stay unknown
   assert.equal(normalizeRestaurant(poi(4)).price, null);
   assert.deepEqual(normalizeRestaurant(poi(0)).price, { low: 48, high: 72 });
 });
+test('exact POI detail can fill price and weekly opening hours', async () => {
+  const provider = createMapProvider(testEnv, async input => {
+    const url = new URL(String(input)); assert.ok(url.pathname.endsWith('/v5/place/detail')); assert.equal(url.searchParams.get('id'), 'shop-1');
+    return new Response(JSON.stringify({ status: '1', pois: [{ ...poi(0), id: 'shop-1', business: { cost: '88', opentime_week: '周一至周日 11:00-22:00' } }] }));
+  }, { intervalMs: 0 });
+  const detail = await provider.restaurantDetail('shop-1');
+  assert.deepEqual(detail.price, { low: 70, high: 106 }); assert.equal(detail.hours, '周一至周日 11:00-22:00');
+});
 test('model failure falls back to literal location-bound excerpts', async () => {
   const tips = await extractTips([{ id: 'pasted-1', content: fixtureContent }], ['西湖风景名胜区'], testEnv, async () => { throw Error('timeout'); });
   assert.equal(tips.length, 1); assert.ok(fixtureContent.includes(tips[0].quote));
@@ -57,6 +77,34 @@ test('map route caching is directed and failed values do not become zeros', asyn
   assert.equal(count, 1); await provider.route(to, from, 'walk', '杭州'); assert.equal(count, 2);
   const broken = createMapProvider(testEnv, async () => new Response('{"status":"1","route":{"paths":[{"duration":"","distance":""}]}}'));
   const result = await broken.route(from, to, 'walk', '杭州'); assert.equal(result.state, 'pending'); assert.equal(result.minutes, null);
+});
+
+test('route 2.0 returns validated geometry for the real map', async () => {
+  const provider = createMapProvider(testEnv, async input => {
+    assert.ok(new URL(String(input)).pathname.startsWith('/v5/direction/'));
+    return new Response(JSON.stringify({ status: '1', route: { paths: [{ cost: { duration: '600' }, distance: '1200', steps: [{ polyline: '120.1,30.2;120.15,30.25;120.2,30.2' }] }] } }));
+  }, { intervalMs: 0 });
+  const result = await provider.route(days[0].stops[0], days[0].stops[1], 'walk', '杭州');
+  assert.equal(result.state, 'live');
+  assert.deepEqual(result.polyline, [[120.1, 30.2], [120.15, 30.25], [120.2, 30.2]]);
+});
+test('route 2.0 also accepts nested polyline objects returned by transit', async () => {
+  const provider = createMapProvider(testEnv, async input => {
+    const url = new URL(String(input));
+    if (url.pathname.includes('/geocode/')) return new Response(JSON.stringify({ status: '1', geocodes: [{ citycode: '0571' }] }));
+    return new Response(JSON.stringify({ status: '1', route: { transits: [{ cost: { duration: '600', transit_fee: '3' }, distance: '1200', segments: [{ walking: { steps: [{ polyline: { polyline: '120.1,30.2;120.15,30.25' } }] }, bus: { buslines: [{ polyline: { polyline: '120.15,30.25;120.2,30.2' } }] } }] }] } }));
+  }, { intervalMs: 0 });
+  const result = await provider.route(days[0].stops[0], days[0].stops[1], 'transit', '杭州');
+  assert.deepEqual(result.polyline, [[120.1, 30.2], [120.15, 30.25], [120.15, 30.25], [120.2, 30.2]]);
+});
+
+test('a user-selected restaurant with unknown fields is arranged unless it has a hard conflict', async () => {
+  const preferred = { ...normalizeRestaurant(poi(4)), city: '杭州', preferred: true };
+  const food = await buildFoodPlan(request, days, allocateBudget(request), testEnv, fixtureFetch, { mapIntervalMs: 0, preferredRestaurants: [preferred], discoverySources: [] });
+  const chosen = food.meals[0].options.find(option => option.restaurant.id === food.meals[0].selectedId);
+  assert.equal(chosen.restaurant.id, preferred.id);
+  assert.equal(chosen.eligible, false);
+  assert.equal(chosen.canAcceptPending, true);
 });
 test('integrated generation produces unique feasible branches and evidence with group budget', async () => {
   const food = await buildFoodPlan(request, days, allocateBudget(request), testEnv, fixtureFetch, { mapIntervalMs: 0 });

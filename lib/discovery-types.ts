@@ -3,6 +3,7 @@ import type { TripRequest } from './plan';
 export type DiscoveryEvidence = {
   sourceId: string; title: string; url: string | null; quote: string;
   publishedAt: string | null; queriedAt: string;
+  dishes?: string[];
 };
 
 export type DiscoveryCandidate = {
@@ -12,7 +13,7 @@ export type DiscoveryCandidate = {
   recommendationReason: string; durationMinutes: number; estimatedCost: number | null;
   price: { low: number; high: number } | null; hours: string;
   source: string; queriedAt: string; verified: true; navigationUrl: string;
-  evidence: DiscoveryEvidence[]; evidenceScore: number;
+  evidence: DiscoveryEvidence[]; evidenceScore: number; featuredDishes?: string[];
 };
 
 export type DiscoveryResult = {

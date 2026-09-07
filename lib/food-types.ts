@@ -5,16 +5,19 @@ export type EvidenceSource = {
 export type EvidenceTip = {
   id: string; sourceId: string; placeName: string; text: string; quote: string;
   category: 'food' | 'travel' | 'ranking'; state: 'pending';
+  dishes?: string[];
 };
 export type Restaurant = {
   id: string; name: string; address: string; lng: number; lat: number;
   category: string; price: { low: number; high: number } | null;
   hours: string; hoursDate?: string | null; source: string; queriedAt: string; tips: EvidenceTip[];
   city?: string; preferred?: boolean; imageUrl?: string | null; navigationUrl?: string | null;
+  featuredDishes?: string[];
 };
 export type RouteLeg = {
   from: string; to: string; minutes: number | null; meters: number | null;
   fare: number | null; state: 'live' | 'pending'; queriedAt: string;
+  polyline?: [number, number][]; error?: string | null;
 };
 export type MealSlot = {
   id: string; dayIndex: number; city: string; label: string; date: string;
@@ -27,6 +30,7 @@ export type MealOption = {
   extraMinutes: number | null; extraFare: number | null;
   totalLow: number | null; totalHigh: number | null; arrival: number | null;
   finish: number | null; eligible: boolean; reasons: string[]; pending: string[];
+  canAcceptPending: boolean; hardBlocked: boolean;
   score: number; explanation: string;
 };
 export type Meal = {
