@@ -7,6 +7,7 @@ import { CityMultiSelect } from './city-multi-select';
 import { RouteMap } from './route-map';
 import { CandidatePicker } from './candidate-picker';
 import type { DiscoveryResult } from '../lib/discovery-types';
+import { userFacingRequestError } from '../lib/client-errors.mjs';
 
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const sourceName = (state: string) => state === 'live' ? '已查询' : state === 'demo' ? '演示数据' : '待确认';
@@ -29,7 +30,7 @@ export default function Home() {
       const response = await fetch('/api/discover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await response.json(); if (!response.ok) throw Error(json.error);
       setDiscovery(json); setSelectedIds([]); setPlan(null);
-    } catch (e) { setError(e instanceof Error ? e.message : '候选发现失败'); } finally { setLoading(false); }
+    } catch (e) { setError(userFacingRequestError(e, '候选发现失败')); } finally { setLoading(false); }
   }
   const generatePlan = async () => {
     if (!discovery || loading) return;
@@ -37,7 +38,7 @@ export default function Home() {
     try {
       const response = await fetch('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discoveryId: discovery.discoveryId, selectedIds }) });
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
-    } catch (e) { setError(e instanceof Error ? e.message : '路线生成失败'); } finally { setLoading(false); }
+    } catch (e) { setError(userFacingRequestError(e, '路线生成失败')); } finally { setLoading(false); }
   };
   const toggleCandidate = (id: string) => setSelectedIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
   const change: MealAction = async (mealId, action, restaurantId) => {
@@ -46,7 +47,7 @@ export default function Home() {
     try {
       const response = await fetch('/api/food', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, mealId, action, restaurantId }) });
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
-    } catch (e) { setChangeError(e instanceof Error ? e.message : '调整失败'); } finally { setChanging(false); }
+    } catch (e) { setChangeError(userFacingRequestError(e, '调整失败')); } finally { setChanging(false); }
   };
   return <main>
     <header><div className="brand">TRAVELCANVAS <span>中国旅行规划</span></div><p>路线以数据校验，灵感由 AI 生成</p></header>

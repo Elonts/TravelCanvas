@@ -4,14 +4,19 @@ import test from 'node:test';
 
 const command = readFileSync(new URL('../启动 TravelCanvas.cmd', import.meta.url), 'utf8');
 const script = readFileSync(new URL('../scripts/start-travelcanvas.ps1', import.meta.url), 'utf8');
+const stopCommand = readFileSync(new URL('../停止 TravelCanvas.cmd', import.meta.url), 'utf8');
+const stopScript = readFileSync(new URL('../scripts/stop-travelcanvas.ps1', import.meta.url), 'utf8');
 
 test('one-click launcher starts the production server and opens only the local URL', () => {
   assert.match(command, /start-travelcanvas\.ps1/);
   assert.match(script, /npm\.cmd/);
-  assert.match(script, /'run', 'start'/);
+  assert.match(script, /node_modules\\next\\dist\\bin\\next/);
+  assert.match(script, /serverArguments = .*nextCli/);
   assert.match(script, /127\.0\.0\.1/);
   assert.match(script, /Start-Process \$url/);
   assert.doesNotMatch(script, /0\.0\.0\.0/);
+  assert.match(script, /WindowStyle Hidden/);
+  assert.match(script, /RedirectStandardError/);
 });
 
 test('launcher never installs dependencies or writes provider secrets', () => {
@@ -26,4 +31,12 @@ test('launcher rebuilds only when the production build is missing or older than 
   assert.match(script, /LastWriteTimeUtc/);
   assert.match(script, /run build/);
   assert.match(script, /TravelCanvas is already running/);
+});
+
+test('launcher records the background process and the stop command only terminates the matching Next process', () => {
+  assert.match(script, /server-\$Port\.pid/);
+  assert.match(stopCommand, /stop-travelcanvas\.ps1/);
+  assert.match(stopScript, /Get-CimInstance Win32_Process/);
+  assert.match(stopScript, /CommandLine -like/);
+  assert.match(stopScript, /Stop-Process -Id \$savedPid/);
 });

@@ -1,11 +1,16 @@
 param(
   [ValidateRange(1024, 65535)]
-  [int]$Port = 3000
+  [int]$Port = 3000,
+  [switch]$NoBrowser
 )
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $url = "http://127.0.0.1:$Port"
+$runtimeRoot = Join-Path $env:LOCALAPPDATA 'TravelCanvas'
+$pidFile = Join-Path $runtimeRoot "server-$Port.pid"
+$outputLog = Join-Path $runtimeRoot "server-$Port.log"
+$errorLog = Join-Path $runtimeRoot "server-$Port-error.log"
 
 function Stop-WithMessage([string]$Message) {
   Write-Host "ERROR: $Message" -ForegroundColor Red
@@ -24,6 +29,10 @@ function Test-TravelCanvasPage($Response) {
   return $null -ne $Response -and $Response.StatusCode -eq 200 -and $Response.Content -match 'TRAVELCANVAS'
 }
 
+function Open-TravelCanvas {
+  if (-not $NoBrowser) { Start-Process $url }
+}
+
 Set-Location -LiteralPath $projectRoot
 
 $node = Get-Command node.exe -ErrorAction SilentlyContinue
@@ -38,11 +47,21 @@ if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'node_modules\next\pack
 $existing = Get-LocalPage
 if (Test-TravelCanvasPage $existing) {
   Write-Host "TravelCanvas is already running at $url"
-  Start-Process $url
+  Open-TravelCanvas
   exit 0
 }
 if ($existing) {
   Stop-WithMessage "Port $Port is already used by another web application. Close it or start TravelCanvas on another port."
+}
+
+New-Item -ItemType Directory -Path $runtimeRoot -Force | Out-Null
+if (Test-Path -LiteralPath $pidFile) {
+  $savedPid = [int](Get-Content -LiteralPath $pidFile -Raw)
+  $savedProcess = Get-Process -Id $savedPid -ErrorAction SilentlyContinue
+  if ($savedProcess) {
+    Stop-WithMessage "A TravelCanvas background process still exists but is not responding. Double-click Stop TravelCanvas, then start it again. Logs: $errorLog"
+  }
+  Remove-Item -LiteralPath $pidFile -Force
 }
 
 $buildMarker = Join-Path $projectRoot '.next\BUILD_ID'
@@ -65,19 +84,26 @@ if ($needsBuild) {
 }
 
 Write-Host "Starting TravelCanvas at $url ..."
-$server = Start-Process -FilePath $npm.Source -ArgumentList @('run', 'start', '--', '--hostname', '127.0.0.1', '--port', [string]$Port) -WorkingDirectory $projectRoot -WindowStyle Normal -PassThru
+$nextCli = Join-Path $projectRoot 'node_modules\next\dist\bin\next'
+$serverArguments = "`"$nextCli`" start --hostname 127.0.0.1 --port $Port"
+$server = Start-Process -FilePath $node.Source -ArgumentList $serverArguments -WorkingDirectory $projectRoot -WindowStyle Hidden -RedirectStandardOutput $outputLog -RedirectStandardError $errorLog -PassThru
+[System.IO.File]::WriteAllText($pidFile, [string]$server.Id)
 
 for ($attempt = 0; $attempt -lt 100; $attempt++) {
   if ($server.HasExited) {
-    Stop-WithMessage "The server stopped before it was ready. Port $Port may be occupied; check the server window for details."
+    Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+    $details = if (Test-Path -LiteralPath $errorLog) { (Get-Content -LiteralPath $errorLog -Tail 8) -join [Environment]::NewLine } else { 'No error log was written.' }
+    Stop-WithMessage "The server stopped before it was ready. $details"
   }
   $response = Get-LocalPage
   if (Test-TravelCanvasPage $response) {
     Write-Host 'TravelCanvas is ready. Opening the browser...'
-    Start-Process $url
+    Open-TravelCanvas
     exit 0
   }
   Start-Sleep -Milliseconds 300
 }
 
-Stop-WithMessage "TravelCanvas did not become ready within 30 seconds. Check the server window for details."
+Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+Stop-WithMessage "TravelCanvas did not become ready within 30 seconds. Logs: $outputLog and $errorLog"
