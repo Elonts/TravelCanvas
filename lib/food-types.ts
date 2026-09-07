@@ -10,6 +10,7 @@ export type Restaurant = {
   id: string; name: string; address: string; lng: number; lat: number;
   category: string; price: { low: number; high: number } | null;
   hours: string; hoursDate?: string | null; source: string; queriedAt: string; tips: EvidenceTip[];
+  city?: string; preferred?: boolean; imageUrl?: string | null; navigationUrl?: string | null;
 };
 export type RouteLeg = {
   from: string; to: string; minutes: number | null; meters: number | null;

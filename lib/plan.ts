@@ -9,6 +9,8 @@ import { distributeDays, parseCandidatePlaces, targetStopCount, uniqueStops } fr
 import { orderStops } from './optimizer.mjs';
 import { createRoutePoints } from './route-points.mjs';
 import type { FoodPlan, RouteLeg } from './food-types';
+import type { DiscoveryCandidate } from './discovery-types';
+import { amapNavigationUrl } from './navigation.mjs';
 
 export { requestSchema };
 export type TripRequest = z.infer<typeof requestSchema>;
@@ -41,7 +43,7 @@ async function mapStops(stops: Stop[], destination: string, count: number, map: 
   if (!map) return { stops, state: 'demo' as const };
   const enriched = await Promise.all(stops.map(async stop => {
     const poi = await map.place(stop.name, destination);
-    return poi ? { ...stop, ...poi, city: destination, verified: true } : stop;
+    return poi ? { ...stop, ...poi, city: destination, verified: true, navigationUrl: amapNavigationUrl(poi) } : stop;
   }));
   const unique = uniqueStops(enriched);
   const supplemental = unique.length < count ? await map.attractions(destination, count) : [];
@@ -85,8 +87,35 @@ async function transferRoutes(request: TripRequest, map: MapProvider | null, ori
   return legs;
 }
 
-export async function buildPlan(request: TripRequest): Promise<Plan> {
-  const map = process.env.AMAP_API_KEY ? createMapProvider() : null;
+function selectedStops(candidates: DiscoveryCandidate[], city: string): Stop[] {
+  return candidates.filter((candidate): candidate is DiscoveryCandidate & { kind: 'attraction' | 'entertainment' } => candidate.city === city && candidate.kind !== 'food').map(candidate => ({
+    id: `selected-${candidate.poiId}`, poiId: candidate.poiId, city, kind: candidate.kind, name: candidate.name, address: candidate.address,
+    lng: candidate.lng, lat: candidate.lat, verified: true, navigationUrl: candidate.navigationUrl, time: '', detail: `${candidate.introduction} 推荐理由：${candidate.recommendationReason}`,
+    duration: `约 ${Math.round(candidate.durationMinutes / 30) / 2} 小时`, durationMinutes: candidate.durationMinutes,
+    cost: candidate.estimatedCost || 0, costPending: candidate.estimatedCost === null, indoor: candidate.kind === 'entertainment',
+  }));
+}
+
+function selectedFood(candidates: DiscoveryCandidate[]) {
+  return candidates.filter(candidate => candidate.kind === 'food').map(candidate => ({
+    id: candidate.poiId, city: candidate.city, preferred: true, name: candidate.name, address: candidate.address, lng: candidate.lng, lat: candidate.lat,
+    category: candidate.category, price: candidate.price, hours: candidate.hours, source: candidate.source, queriedAt: candidate.queriedAt,
+    imageUrl: candidate.imageUrl, navigationUrl: candidate.navigationUrl, tips: candidate.evidence.map((evidence, index) => ({ id: `discovery-tip-${index}`, sourceId: evidence.sourceId, placeName: candidate.name, text: evidence.quote, quote: evidence.quote, category: 'food' as const, state: 'pending' as const })),
+  }));
+}
+
+function discoverySources(candidates: DiscoveryCandidate[]) {
+  const sources = new Map<string, { id: string; title: string; url: string | null; content: string; kind: 'search'; publishedAt: string | null; queriedAt: string }>();
+  candidates.flatMap(candidate => candidate.evidence).forEach(evidence => {
+    const previous = sources.get(evidence.sourceId);
+    sources.set(evidence.sourceId, { id: evidence.sourceId, title: evidence.title, url: evidence.url, content: [previous?.content, evidence.quote].filter(Boolean).join('。'), kind: 'search', publishedAt: evidence.publishedAt, queriedAt: evidence.queriedAt });
+  });
+  return [...sources.values()];
+}
+
+export async function buildPlan(request: TripRequest, selected: DiscoveryCandidate[] | null = null): Promise<Plan> {
+  const testMapInterval = process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400;
+  const map = process.env.AMAP_API_KEY ? createMapProvider(process.env, fetch, { intervalMs: testMapInterval }) : null;
   const orderedCities = await orderDestinations(request, map);
   const dayCounts = allocateDestinationDays(request.days, orderedCities.destinations.length);
   const days: Day[] = [];
@@ -97,8 +126,8 @@ export async function buildPlan(request: TripRequest): Promise<Plan> {
     const destination = orderedCities.destinations[index].name;
     const cityDays = dayCounts[index];
     const fallback = candidateStops(destination);
-    const candidates = await aiCandidateNames(request, destination, cityDays, fallback);
-    const mapped = await mapStops(candidates.stops, destination, targetStopCount(cityDays), map);
+    const candidates = selected ? { stops: selectedStops(selected, destination), state: 'live' as const } : await aiCandidateNames(request, destination, cityDays, fallback);
+    const mapped = selected ? { stops: candidates.stops, state: candidates.stops.every(stop => stop.verified) ? 'live' as const : 'pending' as const } : await mapStops(candidates.stops, destination, targetStopCount(cityDays), map);
     const cityRequest = { ...request, destinations: [destination], days: cityDays, startDate: addDays(request.startDate, elapsedDays) };
     const cityDaysResult = distributeDays(mapped.stops, cityRequest, routeAnchor).map((day: Day) => ({ ...day, city: destination }));
     days.push(...cityDaysResult);
@@ -110,7 +139,11 @@ export async function buildPlan(request: TripRequest): Promise<Plan> {
   const orderedStops = days.flatMap(day => day.stops);
   const budget = allocateBudget(request);
   const primaryCity = orderedCities.destinations[0].name;
-  const [weatherData, food] = await Promise.all([weather(primaryCity, days[0].date), buildFoodPlan(request, days, budget)]);
+  const preferredRestaurants = selected ? selectedFood(selected) : [];
+  const selectedSources = selected ? discoverySources(selected) : [];
+  const reusedSources = selectedSources.length ? selectedSources : null;
+  const buildSelectedFoodPlan = buildFoodPlan as unknown as (request: TripRequest, days: Day[], budget: Record<string, number>, env: NodeJS.ProcessEnv, fetcher: typeof fetch, options: { mapIntervalMs: number; preferredRestaurants: ReturnType<typeof selectedFood>; discoverySources: ReturnType<typeof discoverySources> | null }) => Promise<FoodPlan>;
+  const [weatherData, food] = await Promise.all([weather(primaryCity, days[0].date), buildSelectedFoodPlan(request, days, budget, process.env, fetch, { mapIntervalMs: testMapInterval, preferredRestaurants, discoverySources: reusedSources })]);
   const transfers = await transferRoutes(request, map, orderedCities.origin, orderedCities.destinations);
   const routeState: DataState = map && orderedCities.state === 'live' && transfers.every(leg => leg.state === 'live') ? 'live' : 'pending';
   const route: RouteOverview = {

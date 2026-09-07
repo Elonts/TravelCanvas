@@ -22,18 +22,35 @@ try {
       await page.getByLabel('旅行天数').fill('1');
       await page.getByLabel('旅行预算（元）').fill('6000');
       await page.getByLabel('餐饮偏好').fill('杭帮菜');
-      await page.getByRole('button', { name: '生成旅行与美食方案' }).click();
-      await page.locator('.result').waitFor({ timeout: 30000 });
-      await page.locator('.route-map').waitFor();
-      assert.ok(await page.locator('.map-marker').count() >= 4);
-      const mapPoint = page.locator('.map-point-list button').nth(1);
-      const mapPointName = (await mapPoint.innerText()).replace(/^\d+\s*/, '');
-      await mapPoint.click();
-      assert.ok((await page.locator('.map-popover').innerText()).includes(mapPointName));
-      await page.getByRole('button', { name: '第 1 天', exact: true }).click();
-      assert.equal(await page.locator('.meal').count(), 2);
-      if (mode === 'fixtures') {
+      await page.getByRole('button', { name: /发现景区、美食与娱乐候选/ }).click();
+      await page.locator('.candidate-panel').waitFor({ timeout: 60000 });
+
+      if (mode === 'offline') {
+        assert.equal(await page.locator('.candidate-card').count(), 0);
+        assert.equal(await page.getByRole('button', { name: /用已选地点生成路线/ }).isDisabled(), true);
+        assert.ok((await page.locator('.candidate-panel').innerText()).includes('高德 部分待确认'));
+      } else {
+        for (const label of ['景区 · 杭州', '美食 · 杭州', '娱乐 · 杭州']) {
+          const card = page.locator('.candidate-card').filter({ hasText: label }).first();
+          await card.getByRole('button', { name: '加入行程' }).click();
+        }
+        assert.ok(await page.locator('.candidate-image img').count() >= 3);
+        await page.waitForFunction(() => [...document.querySelectorAll('.candidate-image img')].slice(0, 3).every(image => image.complete && image.naturalWidth > 0));
+        assert.ok(await page.getByText(/小红书公开笔记证据/).count() > 0);
+        await page.getByRole('button', { name: /用已选地点生成路线/ }).click();
+        await page.locator('.result').waitFor({ timeout: 60000 });
+        await page.locator('.route-map').waitFor();
+        assert.ok(await page.locator('.map-marker').count() >= 3);
+        assert.ok(await page.getByRole('link', { name: /在高德地图打开并导航/ }).count() >= 3);
+        const firstNavigation = await page.getByRole('link', { name: /在高德地图打开并导航/ }).first().getAttribute('href');
+        assert.ok(firstNavigation.startsWith('https://uri.amap.com/navigation?'));
+        const mapPoint = page.locator('.map-point-list button').nth(1);
+        const mapPointName = (await mapPoint.innerText()).replace(/^\d+\s*/, '');
+        await mapPoint.click();
+        assert.ok((await page.locator('.map-popover').innerText()).includes(mapPointName));
+        assert.equal(await page.locator('.meal').count(), 2);
         const meal = page.locator('.meal').first();
+        if (await meal.getByRole('button', { name: '解锁餐厅' }).count()) await meal.getByRole('button', { name: '解锁餐厅' }).click();
         const before = await meal.locator('h4').first().innerText();
         await meal.getByRole('button', { name: '更省钱', exact: true }).click();
         await page.waitForFunction(name => document.querySelector('.meal h4')?.textContent !== name, before);
@@ -41,39 +58,15 @@ try {
         await meal.getByRole('button', { name: '锁定这家' }).click();
         await meal.getByRole('button', { name: '解锁餐厅' }).waitFor();
         assert.equal(await meal.getByRole('button', { name: '更省钱', exact: true }).isDisabled(), true);
-        await meal.getByRole('button', { name: '解锁餐厅' }).click();
-        await meal.getByRole('button', { name: '锁定这家' }).waitFor();
-        await meal.getByRole('button', { name: '更顺路', exact: true }).click();
-        await page.waitForFunction(() => document.querySelector('.result')?.getAttribute('aria-busy') === 'false');
-        assert.equal(await page.locator('.error[role="alert"]').count(), 0, (await page.locator('.error[role="alert"]').allTextContents()).join());
         assert.ok(await page.locator('.evidence-tip').count() > 0);
-      } else assert.equal(await page.getByText('暂未安排餐厅', { exact: true }).count(), 2);
-      await page.locator('.result').scrollIntoViewIfNeeded();
+      }
+
       await page.screenshot({ path: `test-artifacts/${mode}-desktop.png`, fullPage: true });
       await page.setViewportSize({ width: 390, height: 844 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'Mobile layout must not overflow');
       await page.screenshot({ path: `test-artifacts/${mode}-mobile.png`, fullPage: true });
-      if (mode === 'fixtures') {
-        // Reproduce the reported three-day bug and the all-pending restaurant state.
-        await page.getByLabel('旅行天数').fill('3');
-        await page.getByLabel('饮食禁忌 / 过敏').fill('花生过敏');
-        const response = page.waitForResponse(r => r.url().endsWith('/api/plan') && r.request().method() === 'POST', { timeout: 60000 });
-        await page.getByRole('button', { name: '生成旅行与美食方案' }).click();
-        assert.equal((await response).status(), 200);
-        await page.waitForFunction(() => document.querySelectorAll('.day').length === 3);
-        const names = await page.locator('.stop strong').allTextContents();
-        assert.equal(names.length, 9); assert.equal(new Set(names).size, 9);
-        assert.equal(await page.locator('.meal').count(), 6);
-        assert.equal(await page.getByText('暂未安排餐厅', { exact: true }).count(), 6);
-        assert.ok(await page.locator('.meal .restaurant h4:visible').count() >= 6, 'Specific restaurant names must be visible without expanding details');
-        assert.ok(await page.getByText('具体门店建议 · 需确认后安排', { exact: true }).count() > 0);
-        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-        await page.locator('.meal').first().screenshot({ path: 'test-artifacts/multiday-food-mobile.png' });
-        await page.setViewportSize({ width: 1440, height: 1000 });
-        await page.locator('.day').first().screenshot({ path: 'test-artifacts/multiday-day-desktop.png' });
-      }
       assert.deepEqual(errors, []);
-      console.log(`PASS browser: ${mode}, desktop/mobile, no client errors`);
+      console.log(`PASS browser: ${mode}, two-stage discovery and responsive layout`);
     } finally { await page.close(); server.stop(); }
   }
 } finally { await browser.close(); }

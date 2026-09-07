@@ -48,6 +48,34 @@
 .map-note, .map-empty { color: var(--muted); font-size: 11px !important; line-height: 1.6; }
 .map-empty { padding: 80px 20px; text-align: center; }
 .route-map button { justify-self: auto; }
+.candidate-panel { margin-top: 26px; }
+.candidate-warnings { margin: 12px 0 0; }
+.candidate-warnings p { color: var(--muted); font-size: 12px; }
+.candidate-city { padding: 22px 0; border-bottom: 1px solid var(--line); }
+.candidate-city > h3 { margin: 0 0 16px; font-size: 24px; }
+.candidate-category { margin-top: 20px; }
+.candidate-category-title { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 9px; }
+.candidate-category-title span, .candidate-empty { color: var(--muted); font-size: 12px; }
+.candidate-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+.candidate-card { position: relative; display: grid; grid-template-columns: 150px minmax(0, 1fr); overflow: hidden; background: #fff; border: 1px solid var(--line); border-radius: 12px; transition: border-color .15s, box-shadow .15s; }
+.candidate-card.selected { border-color: var(--green); box-shadow: 0 0 0 2px #28584922; }
+.candidate-toggle { position: absolute; z-index: 2; top: 9px; right: 9px; width: auto; padding: 7px 9px; color: var(--green); font-size: 11px; background: #fffef8ec; border: 1px solid #bfcfc0; backdrop-filter: blur(6px); }
+.candidate-toggle span { display: inline-grid; width: 17px; height: 17px; margin-right: 5px; color: white; background: var(--green); border-radius: 50%; place-items: center; }
+.candidate-image { display: grid; min-height: 235px; overflow: hidden; color: #fff; font-size: 44px; background: #8ba79b; place-items: center; }
+.candidate-image img { width: 100%; height: 100%; object-fit: cover; }
+.candidate-content { padding: 16px; }
+.candidate-content h4 { padding-right: 75px; margin: 5px 0 7px; font-size: 18px; }
+.candidate-content > p { margin: 8px 0; font-size: 12px; line-height: 1.65; }
+.candidate-address, .candidate-source { color: var(--muted); }
+.candidate-reason { padding: 8px 10px; background: #f2f4ef; border-radius: 7px; }
+.candidate-evidence { margin: 10px 0; }
+.candidate-evidence div { padding: 8px 0; border-top: 1px solid var(--line); }
+.candidate-evidence p { margin: 0 0 4px; font-size: 12px; line-height: 1.55; }
+.selection-bar { position: sticky; z-index: 10; bottom: 12px; display: flex; gap: 20px; align-items: center; justify-content: space-between; margin-top: 20px; padding: 14px 16px; background: #fffdf5ed; border: 1px solid var(--line); border-radius: 11px; box-shadow: 0 10px 35px #18322e26; backdrop-filter: blur(10px); }
+.selection-bar p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+.selection-bar button { width: auto; white-space: nowrap; }
+.nav-link { display: inline-flex; margin-top: 9px; color: var(--green); font-size: 12px; font-weight: 800; }
+.restaurant-image { width: 100%; max-height: 260px; margin-bottom: 12px; object-fit: cover; border-radius: 8px; }
 
 @media (max-width: 760px) {
   .destination-field { grid-column: auto; }
@@ -56,6 +84,7 @@
   .map-title { align-items: start; }
   .map-stage { min-height: 300px; }
   .map-stage svg { height: 340px; }
+  .candidate-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 520px) {
@@ -65,4 +94,7 @@
   .map-title { display: grid; }
   .map-controls { justify-content: end; }
   .map-popover { bottom: 9px; left: 9px; max-width: calc(100% - 18px); }
+  .candidate-card { grid-template-columns: 1fr; }
+  .candidate-image { min-height: 190px; max-height: 240px; }
+  .selection-bar { align-items: stretch; flex-direction: column; }
 }

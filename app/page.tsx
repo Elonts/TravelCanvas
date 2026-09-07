@@ -5,12 +5,16 @@ import type { Plan } from '../lib/plan';
 import { FoodSummary, MealCard, SourceTip, type MealAction } from './food-view';
 import { CityMultiSelect } from './city-multi-select';
 import { RouteMap } from './route-map';
+import { CandidatePicker } from './candidate-picker';
+import type { DiscoveryResult } from '../lib/discovery-types';
 
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const sourceName = (state: string) => state === 'live' ? '已查询' : state === 'demo' ? '演示数据' : '待确认';
 
 export default function Home() {
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [discovery, setDiscovery] = useState<DiscoveryResult | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [changing, setChanging] = useState(false);
   const [error, setError] = useState('');
@@ -22,10 +26,20 @@ export default function Home() {
       if (!destinations.length) throw Error('请至少选择一个目的地城市');
       const body: Record<string, FormDataEntryValue | string[]> = Object.fromEntries(new FormData(event.currentTarget));
       body.destinations = destinations;
-      const response = await fetch('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
-    } catch (e) { setError(e instanceof Error ? e.message : '生成失败'); } finally { setLoading(false); }
+      const response = await fetch('/api/discover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const json = await response.json(); if (!response.ok) throw Error(json.error);
+      setDiscovery(json); setSelectedIds([]); setPlan(null);
+    } catch (e) { setError(e instanceof Error ? e.message : '候选发现失败'); } finally { setLoading(false); }
   }
+  const generatePlan = async () => {
+    if (!discovery || loading) return;
+    setLoading(true); setError('');
+    try {
+      const response = await fetch('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discoveryId: discovery.discoveryId, selectedIds }) });
+      const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
+    } catch (e) { setError(e instanceof Error ? e.message : '路线生成失败'); } finally { setLoading(false); }
+  };
+  const toggleCandidate = (id: string) => setSelectedIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
   const change: MealAction = async (mealId, action, restaurantId) => {
     if (!plan || changing || loading) return;
     setChanging(true); setChangeError('');
@@ -62,9 +76,10 @@ export default function Home() {
         <label>帖子正文<textarea name="noteText" maxLength={12000} rows={5} placeholder="粘贴包含具体分店名、点单或旅游经验的正文…" /></label>
         <div className="grid"><label>原文 / 分享链接<input name="noteUrl" type="url" placeholder="https://www.xiaohongshu.com/explore/…" maxLength={2000} /></label><label>帖子发布日期（知道时填写）<input name="noteDate" type="date" /></label></div>
       </details>
-      <button disabled={loading || changing}>{loading ? '正在查询门店、路线与攻略…' : '生成旅行与美食方案  →'}</button></form>
+      <button disabled={loading || changing}>{loading && !discovery ? '正在查询地点、图片与公开笔记…' : '发现景区、美食与娱乐候选 →'}</button></form>
       {error && <p className="error" role="alert">{error}</p>}
     </section>
+    {discovery && <CandidatePicker discovery={discovery} selectedIds={selectedIds} busy={loading} error={plan ? '' : error} onToggle={toggleCandidate} onGenerate={generatePlan} />}
     {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} changeError={changeError} />}
   </main>;
 }
@@ -75,7 +90,7 @@ function PlanView({ plan, busy, onAction, changeError }: { plan: Plan; busy: boo
   const attachedNames = new Set(plan.days.flatMap(day => day.stops.map(stop => stop.name)));
   const generalTips = plan.food.tips.filter(tip => !attachedNames.has(tip.placeName) && !plan.food.meals.some(meal => meal.options.some(o => o.restaurant.name === tip.placeName)));
   return <section className="result" aria-busy={busy}>
-    <div className="section-head"><div><span className="eyebrow">02 / 旅行方案</span><h2>{plan.route.cityOrder.join(' → ')} · {plan.request.days} 天行程</h2><p className="route-origin">从 {plan.request.origin} 出发</p></div><small>更新于 {new Date(plan.sources.updatedAt).toLocaleString('zh-CN')}</small></div>
+    <div className="section-head"><div><span className="eyebrow">03 / 旅行方案</span><h2>{plan.route.cityOrder.join(' → ')} · {plan.request.days} 天行程</h2><p className="route-origin">从 {plan.request.origin} 出发</p></div><small>更新于 {new Date(plan.sources.updatedAt).toLocaleString('zh-CN')}</small></div>
     <div className="notice">当前数据状态：AI {sourceName(plan.sources.ai)} · 景点地图 {sourceName(plan.sources.map)} · 天气 {sourceName(plan.sources.weather)} · 酒店 {sourceName(plan.sources.hotel)} · 小红书公开检索 {sourceName(plan.food.searchState)}。演示数据不代表实时地点或价格。</div>
     {!!plan.food.warnings.length && <div className="notice">{plan.food.warnings.map(warning => <p key={warning}>{warning}</p>)}</div>}
     {changeError && <p className="error change-error" role="alert">{changeError}</p>}
@@ -85,6 +100,7 @@ function PlanView({ plan, busy, onAction, changeError }: { plan: Plan; busy: boo
       {day.warning && <p className="notice">{day.warning}</p>}
       {day.stops.map((stop, i) => <Fragment key={`${day.date}-${stop.id}`}>
         <div className="stop"><time>{stop.time}</time><div><strong>{stop.name} {stop.verified && <i>地点已校验</i>}</strong><p className="address">⌖ {stop.address}</p><p>{stop.detail}</p><div className="tags"><span>停留 {stop.duration}</span><span>{stop.indoor ? '室内/可避雨' : '户外活动'}</span>{i > 0 && <span>景点按距离排序，未核验完整日程</span>}</div>
+          {stop.navigationUrl && <a className="nav-link" href={stop.navigationUrl} target="_blank" rel="noreferrer">在高德地图打开并导航 →</a>}
           {plan.food.tips.filter(tip => tip.placeName === stop.name).map(tip => <SourceTip key={tip.id} tip={tip} food={plan.food} />)}
         </div><b>{stop.costPending ? '费用待确认' : `约 ¥${stop.cost}`}</b></div>
         {plan.food.meals.filter(meal => meal.slot.dayIndex === dayIndex && meal.slot.previous.id === stop.id).map(meal => <MealCard key={meal.slot.id} meal={meal} food={plan.food} busy={busy} onAction={onAction} />)}

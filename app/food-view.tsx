@@ -21,6 +21,7 @@ export function SourceTip({ tip, food }: { tip: EvidenceTip; food: FoodPlan }) {
 function RestaurantOption({ option, food, label, children }: { option: MealOption; food: FoodPlan; label: string; children?: React.ReactNode }) {
   const restaurant = option.restaurant;
   return <div className={`restaurant ${option.eligible ? '' : 'unconfirmed'}`}>
+    {restaurant.imageUrl && <img className="restaurant-image" src={restaurant.imageUrl} alt={`${restaurant.name}的高德地点图片`} loading="lazy" />}
     <span className="eyebrow">{label}</span>
     <h4>{restaurant.name}</h4><p className="address">{restaurant.address}</p>
     <div className="tags"><span>具体地点已核验</span><span>{restaurant.category}</span><span>{option.eligible ? '按参考数据满足约束' : '未安排 · 待确认/不符合条件'}</span></div>
@@ -34,6 +35,7 @@ function RestaurantOption({ option, food, label, children }: { option: MealOptio
       <div><dt>营业线索</dt><dd>{restaurant.hours || '待确认'}</dd></div>
     </dl>
     {[...option.reasons, ...option.pending].map(reason => <p className="constraint-note" key={reason}>{reason}</p>)}
+    {restaurant.navigationUrl && <a className="nav-link" href={restaurant.navigationUrl} target="_blank" rel="noreferrer">在高德地图打开并导航 →</a>}
     <details><summary>查看逐段路线与数据来源</summary>
       {option.route.map((leg, i) => <p key={i}>{leg.from} → {leg.to}：{leg.minutes === null ? '待确认' : `约 ${leg.minutes} 分钟 / ${leg.meters} 米`} · 高德路线 · {stamp(leg.queriedAt)}</p>)}
       {option.direct && <p>原路线：{option.direct.from} → {option.direct.to}，{option.direct.minutes === null ? '待确认' : `约 ${option.direct.minutes} 分钟`}</p>}

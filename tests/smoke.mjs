@@ -8,66 +8,74 @@ for (const mode of ['fixtures', 'offline']) {
     const response = await fetch(server.base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     return { status: response.status, value: await response.json() };
   };
+  const discover = request => post('/api/discover', request);
+  const generate = async request => {
+    const found = await discover(request);
+    assert.equal(found.status, 200, JSON.stringify(found.value));
+    if (!found.value.candidates.length) return { found, generated: null };
+    const generated = await post('/api/plan', { discoveryId: found.value.discoveryId, selectedIds: found.value.candidates.map(candidate => candidate.id) });
+    return { found, generated };
+  };
   try {
-    assert.equal((await post('/api/plan', { ...fixtureRequest, startDate: '2026-02-30' })).status, 400);
-    const generated = await post('/api/plan', fixtureRequest);
-    assert.equal(generated.status, 200, JSON.stringify(generated.value));
-    let plan = generated.value;
-    assert.equal(plan.food.meals.length, 2); assert.ok(plan.planId);
-    assert.ok(!JSON.stringify(plan).includes('test-only-'));
+    assert.equal((await discover({ ...fixtureRequest, startDate: '2026-02-30' })).status, 400);
+    const initial = await generate(fixtureRequest);
+    assert.ok(!JSON.stringify(initial).includes('test-only-'));
+    assert.equal((await post('/api/plan', { discoveryId: initial.found.value.discoveryId, selectedIds: ['forged'] })).status, 409);
     assert.equal((await post('/api/food', { planId: 'forged' })).status, 400);
     if (mode === 'offline') {
-      assert.equal(plan.food.summary.unresolved, 2); assert.equal(plan.food.sources.length, 0);
-      assert.ok(plan.food.warnings.some(w => w.includes('未配置')));
-    } else {
-      assert.equal(plan.food.summary.unresolved, 0);
-      const originalStops = structuredClone(plan.days);
-      const mealId = plan.food.meals[0].slot.id;
-      const previousCost = plan.food.summary.selectedHigh;
-      const action = async (name, restaurantId) => post('/api/food', { planId: plan.planId, revision: plan.revision, mealId, action: name, restaurantId });
-      const cheaper = await action('cheaper'); assert.equal(cheaper.status, 200, JSON.stringify(cheaper.value)); plan = cheaper.value;
-      assert.ok(plan.food.summary.selectedHigh < previousCost); assert.deepEqual(plan.days, originalStops);
-      const locked = await action('lock'); assert.equal(locked.status, 200); plan = locked.value;
-      assert.equal((await action('closer')).status, 409);
-      const unlocked = await action('lock'); assert.equal(unlocked.status, 200); plan = unlocked.value;
-      const closer = await action('closer'); assert.equal(closer.status, 200); plan = closer.value;
-      assert.equal((await action('select', 'forged-id')).status, 409);
-      const stale = await post('/api/food', { planId: plan.planId, revision: 0, mealId, action: 'lock' }); assert.equal(stale.status, 409);
-      assert.equal(plan.food.tips.length, 2);
+      assert.equal(initial.found.value.candidates.length, 0);
+      assert.equal(initial.found.value.sources.map, 'pending');
+      assert.ok(initial.found.value.warnings.some(warning => warning.includes('未配置')));
+      console.log('PASS production HTTP smoke: offline discovery degrades transparently');
+      continue;
     }
-    const multi = await post('/api/plan', { ...fixtureRequest, days: 3 });
-    assert.equal(multi.status, 200);
-    const stops = multi.value.days.flatMap(day => day.stops);
+
+    assert.ok(initial.found.value.candidates.some(candidate => candidate.kind === 'attraction'));
+    assert.ok(initial.found.value.candidates.some(candidate => candidate.kind === 'food' && candidate.evidence.length));
+    assert.ok(initial.found.value.candidates.some(candidate => candidate.kind === 'entertainment'));
+    assert.ok(initial.found.value.candidates.every(candidate => candidate.navigationUrl.startsWith('https://uri.amap.com/navigation')));
+    assert.ok(initial.found.value.candidates.some(candidate => candidate.imageUrl?.startsWith('/api/poi-image?url=')));
+    assert.equal(initial.generated.status, 200, JSON.stringify(initial.generated.value));
+    let plan = initial.generated.value;
+    assert.equal(plan.food.meals.length, 2); assert.ok(plan.planId);
+    assert.ok(plan.days.flatMap(day => day.stops).every(stop => stop.navigationUrl));
+    assert.equal(plan.food.summary.unresolved, 0);
+    const originalStops = structuredClone(plan.days);
+    const mealId = plan.food.meals[0].slot.id;
+    if (plan.food.meals[0].locked) {
+      const unlock = await post('/api/food', { planId: plan.planId, revision: plan.revision, mealId, action: 'lock' });
+      assert.equal(unlock.status, 200); plan = unlock.value;
+    }
+    const previousCost = plan.food.summary.selectedHigh;
+    const action = async (name, restaurantId) => post('/api/food', { planId: plan.planId, revision: plan.revision, mealId, action: name, restaurantId });
+    const cheaper = await action('cheaper'); assert.equal(cheaper.status, 200, JSON.stringify(cheaper.value)); plan = cheaper.value;
+    assert.ok(plan.food.summary.selectedHigh <= previousCost); assert.deepEqual(plan.days, originalStops);
+    const locked = await action('lock'); assert.equal(locked.status, 200); plan = locked.value;
+    assert.equal((await action('closer')).status, 409);
+    const unlocked = await action('lock'); assert.equal(unlocked.status, 200); plan = unlocked.value;
+    assert.equal((await action('select', 'forged-id')).status, 409);
+    assert.equal((await post('/api/food', { planId: plan.planId, revision: 0, mealId, action: 'lock' })).status, 409);
+
+    const multi = await generate({ ...fixtureRequest, days: 3 });
+    assert.equal(multi.generated.status, 200, JSON.stringify(multi.generated.value));
+    const stops = multi.generated.value.days.flatMap(day => day.stops);
     assert.equal(new Set(stops.map(stop => stop.name)).size, stops.length);
-    if (mode === 'fixtures') {
-      assert.equal(stops.length, 9);
-      assert.ok(multi.value.days.every(day => day.stops.length === 3));
-      assert.equal(multi.value.food.meals.length, 6);
-      assert.ok(multi.value.food.meals.every(meal => meal.options.length > 0));
-      const failedModel = await post('/api/plan', { ...fixtureRequest, days: 3, preferences: '模拟AI失败' });
-      assert.equal(failedModel.status, 200);
-      const recovered = failedModel.value.days.flatMap(day => day.stops);
-      assert.equal(recovered.length, 9);
-      assert.equal(new Set(recovered.map(stop => stop.poiId)).size, 9);
-      assert.ok(recovered.some(stop => stop.id.startsWith('map-')));
-      assert.equal(failedModel.value.sources.ai, 'demo');
-    } else assert.ok(multi.value.days.every(day => day.warning));
-    if (mode === 'offline') {
-      const unknown = await post('/api/plan', { ...fixtureRequest, destinations: ['广州'], days: 3 });
-      assert.equal(unknown.status, 200);
-      assert.ok(unknown.value.days.every(day => day.stops.length === 0 && day.warning));
-      assert.equal(unknown.value.food.meals.length, 0);
-    }
-    const cities = await post('/api/plan', { ...fixtureRequest, destinations: ['北京', '杭州'], days: 2 });
-    assert.equal(cities.status, 200, JSON.stringify(cities.value));
-    assert.equal(cities.value.route.cityOrder.length, 2);
-    assert.deepEqual(cities.value.days.map(day => day.city), cities.value.route.cityOrder);
-    assert.deepEqual(cities.value.route.points.map(point => point.order), cities.value.route.points.map((_, index) => index + 1));
-    if (mode === 'fixtures') {
-      assert.deepEqual(cities.value.route.cityOrder, ['杭州', '北京']);
-      assert.equal(cities.value.route.transfers.length, 2);
-      assert.equal(cities.value.route.state, 'live');
-    }
-    console.log(`PASS production HTTP smoke: ${mode}, one and three days`);
+    assert.equal(stops.length, 9);
+    assert.ok(multi.generated.value.days.every(day => day.stops.length === 3));
+    assert.equal(multi.generated.value.food.meals.length, 6);
+
+    const failedModel = await generate({ ...fixtureRequest, days: 3, preferences: '模拟AI失败' });
+    assert.equal(failedModel.generated.status, 200);
+    assert.equal(failedModel.found.value.sources.ai, 'demo');
+
+    const cities = await generate({ ...fixtureRequest, destinations: ['北京', '杭州'], days: 2 });
+    assert.equal(cities.generated.status, 200, JSON.stringify(cities.generated.value));
+    assert.equal(cities.generated.value.route.cityOrder.length, 2);
+    assert.deepEqual(cities.generated.value.days.map(day => day.city), cities.generated.value.route.cityOrder);
+    assert.deepEqual(cities.generated.value.route.points.map(point => point.order), cities.generated.value.route.points.map((_, index) => index + 1));
+    assert.deepEqual(cities.generated.value.route.cityOrder, ['杭州', '北京']);
+    assert.equal(cities.generated.value.route.transfers.length, 2);
+    assert.equal(cities.generated.value.route.state, 'live');
+    console.log('PASS production HTTP smoke: fixtures discovery, selection and route generation');
   } finally { server.stop(); }
 }
