@@ -1,4 +1,4 @@
-export const fixtureRequest = { origin: '上海', destinations: ['杭州'], startDate: '2026-09-10', days: 1, budget: 6000, budgetBasis: 'group', travelers: 2, transport: 'walk', preferences: '', constraints: '', foodPreferences: '杭帮菜', dietary: '', foodMode: 'route', maxDetour: 30, mealMinutes: 60, queueMinutes: 20, noteText: '', noteUrl: '', noteDate: '' };
+export const fixtureRequest = { origin: '上海', destinations: ['杭州'], startDate: '2026-09-10', days: 1, budget: 6000, budgetBasis: 'group', travelers: 2, transport: 'walk', preferences: '', constraints: '', entertainmentPreferences: '台球、足浴', foodPreferences: '杭帮菜', dietary: '', foodMode: 'route', maxDetour: 30, mealMinutes: 60, queueMinutes: 20, noteText: '', noteUrl: '', noteDate: '' };
 export const fixtureDays = [{ city: '杭州', date: '2026-09-10', stops: [{ id: 's1', city: '杭州', name: '西湖风景名胜区', address: '杭州', lng: 120.1, lat: 30.2, verified: true, time: '09:00', durationMinutes: 90 }, { id: 's2', city: '杭州', name: '灵隐寺', address: '杭州', lng: 120.2, lat: 30.2, verified: true, time: '14:30', durationMinutes: 90 }] }];
 export const fixtureContent = '测试江南餐厅（西湖店）在美食推荐榜中被提到，建议提前取号。西湖风景名胜区步行距离较长，建议穿舒适鞋。';
 export const testEnv = { AMAP_API_KEY: 'test-only-map', TAVILY_API_KEY: 'test-only-search', DEEPSEEK_API_KEY: 'test-only-model' };
@@ -32,7 +32,7 @@ export async function fixtureFetch(input, options = {}) {
     if (url.pathname.includes('/place/')) {
       if (url.searchParams.get('types') === '050000') return reply({ status: '1', pois: Array.from({ length: 6 }, (_, i) => poi(i)) });
       if (url.searchParams.get('types') === '110000') return reply({ status: '1', pois: Array.from({ length: 12 }, (_, i) => ({
-        id: `supplement-${i}`, name: i === 0 ? url.searchParams.get('keywords') : `地图补充公园${i}`, address: '杭州测试景点地址', location: `${120.1 + i * .001},30.2`, type: '风景名胜;公园广场', typecode: '110101', photos: [{ url: 'https://store.is.autonavi.com/showpic/test-attraction.jpg?v=valid' }],
+        id: `${url.searchParams.get('keywords')}-${i}`, name: i === 0 ? url.searchParams.get('keywords') : `地图补充公园${i}`, address: '杭州测试景点地址', location: `${120.1 + i * .001},30.2`, type: '风景名胜;公园广场', typecode: '110101', photos: [{ url: 'https://store.is.autonavi.com/showpic/test-attraction.jpg?v=valid' }],
       })) });
       if (url.searchParams.get('types') === '080000') return reply({ status: '1', pois: Array.from({ length: 8 }, (_, i) => ({
         id: `entertainment-${i}`, name: i === 0 ? url.searchParams.get('keywords') : `测试休闲场所${i}`, address: '杭州测试娱乐地址', location: `${120.12 + i * .001},30.22`, type: '体育休闲服务;娱乐场所', typecode: '080301', photos: [{ url: 'https://store.is.autonavi.com/showpic/test-entertainment.jpg?v=valid' }],

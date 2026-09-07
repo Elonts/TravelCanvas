@@ -7,20 +7,19 @@ import type { TripRequest, DataState } from './plan';
 
 const suggestionSchema = z.object({
   attractions: z.array(z.object({ name: z.string().trim().min(2).max(100), reason: z.string().trim().min(2).max(240) })).max(8),
-  entertainment: z.array(z.object({ name: z.string().trim().min(2).max(100), reason: z.string().trim().min(2).max(240) })).max(8),
 });
 const normalize = (value: string) => value.replace(/[\s（）()·]/g, '').toLowerCase();
 const stateOf = (states: DataState[]): DataState => states.length > 0 && states.every(state => state === 'live') ? 'live' : states.length > 0 && states.every(state => state === 'demo') ? 'demo' : 'pending';
 
 async function aiSuggestions(request: TripRequest, city: string) {
-  const fallback = { attractions: candidateStops(city).map(stop => ({ name: stop.name, reason: '本地演示候选，需由高德核验后展示。' })), entertainment: [] };
+  const fallback = { attractions: candidateStops(city).map(stop => ({ name: stop.name, reason: '本地演示候选，需由高德核验后展示。' })) };
   if (!process.env.DEEPSEEK_API_KEY) return { value: fallback, state: 'demo' as const };
   try {
     const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST', signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash', thinking: { type: 'disabled' }, max_tokens: 1600, response_format: { type: 'json_object' }, messages: [
         { role: 'system', content: '你是中国境内旅行候选发现助手，只输出 JSON。地点名称必须具体、可在高德检索。你的内容只是建议，不能编造实时营业、门票、价格或安全信息。' },
-        { role: 'user', content: `为${city}推荐 4 个景区和 6 个娱乐项目。旅行偏好：${request.preferences || '综合体验'}；娱乐偏好：${request.entertainmentPreferences || '台球、足浴、剧本杀、酒馆、本地演出与文化体验'}；旅行限制：${request.constraints || '无'}。返回 {"attractions":[{"name":"正式名称","reason":"与偏好或限制的关系"}],"entertainment":[{"name":"正式名称","reason":"与偏好、景区片区或限制的关系"}]}。娱乐项目应包含用户勾选的类型，并尽量选择景区周边具体分店；不要返回餐厅。` },
+        { role: 'user', content: `为${city}推荐 4 个景区。旅行偏好：${request.preferences || '综合体验'}；旅行限制：${request.constraints || '无'}。返回 {"attractions":[{"name":"正式名称","reason":"与偏好或限制的关系"}]}。不要返回餐厅或娱乐项目。` },
       ] }),
     });
     if (!response.ok) throw Error('model unavailable');
@@ -79,12 +78,11 @@ export async function discoverCandidates(request: TripRequest) {
     const citySourceIds = new Set(searches[index].sources.map(source => source.id));
     const cityTips = tips.filter(tip => citySourceIds.has(tip.sourceId));
     const foodNames = cityTips.filter(tip => tip.category === 'food' || tip.category === 'ranking').map(tip => tip.placeName);
-    const reasons = new Map([...suggestion.attractions, ...suggestion.entertainment].map(item => [normalize(item.name), item.reason]));
+    const reasons = new Map(suggestion.attractions.map(item => [normalize(item.name), item.reason]));
     if (!map) { mapStates.push('pending'); continue; }
-    const [attractions, food, entertainment] = await Promise.all([
-      map.discover(city, 'attraction', suggestion.attractions.map(item => item.name), 6, request.transport),
+    const [attractions, food] = await Promise.all([
+      map.discover(city, 'attraction', suggestion.attractions.map(item => item.name), Math.min(20, Math.max(6, request.days * 3 + 3)), request.transport),
       map.discover(city, 'food', foodNames, 6, request.transport),
-      map.discover(city, 'entertainment', [...suggestion.entertainment.map(item => item.name), ...(request.entertainmentPreferences || '台球 足浴 剧本杀 酒馆').split(/[，,、\s]+/).filter(Boolean)], 10, request.transport),
     ]);
     const targetedSearch = food.length ? await searchNotes({ ...request, destinations: [city], verifiedFoodNames: food.map(place => place.name) }, []) : { sources: [], warnings: [], state: 'pending' as const };
     const targetedSources = targetedSearch.sources.map(source => ({ ...source, id: `${city}:targeted:${source.id}` }));
@@ -97,12 +95,35 @@ export async function discoverCandidates(request: TripRequest) {
     const verifiedTips = [...cityTips, ...targetedTips, ...literalFoodTips].filter((tip, tipIndex, all) => all.findIndex(other => other.sourceId === tip.sourceId && other.quote === tip.quote) === tipIndex);
     candidates.push(...attractions.map(place => makeCandidate(place, 'attraction', request, reasons, cityTips, sources)));
     candidates.push(...food.map(place => makeCandidate(place, 'food', request, reasons, verifiedTips, sources)).sort((a, b) => b.evidenceScore - a.evidenceScore));
-    candidates.push(...entertainment.map(place => makeCandidate(place, 'entertainment', request, reasons, cityTips, sources)));
-    mapStates.push(attractions.length && food.length && entertainment.length ? 'live' : 'pending');
+    mapStates.push(attractions.length && food.length ? 'live' : 'pending');
   }
   if (!candidates.some(candidate => candidate.kind === 'food' && candidate.evidence.length)) warnings.push('本次没有匹配到带具体小红书证据的分店；无证据餐厅仅作为高德候选展示。');
   return {
     request, candidates, warnings,
     sources: { search: searches.every(search => search.state === 'live') ? 'live' as const : 'pending' as const, ai: stateOf(suggestions.map(item => item.state)), map: stateOf(mapStates), updatedAt: new Date().toISOString() },
   };
+}
+
+export async function discoverCustomCandidates(request: TripRequest, city: string, kind: 'attraction' | 'food', names: string[]) {
+  if (!request.destinations.includes(city)) throw Error('只能向本次行程的目的地添加地点');
+  const map = process.env.AMAP_API_KEY ? createMapProvider(process.env, fetch, { intervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400 }) : null;
+  if (!map) throw Error('高德服务未配置，暂时无法核验自定义地点');
+  const places = await map.discover(city, kind, names, Math.min(12, Math.max(names.length * 2, 4)), request.transport);
+  const chosen = names.map(name => places.find(place => normalize(place.name) === normalize(name))
+    || places.find(place => normalize(place.name).includes(normalize(name)) || normalize(name).includes(normalize(place.name))))
+    .filter((place, index, all): place is NonNullable<typeof place> => Boolean(place) && all.findIndex(other => other?.poiId === place?.poiId) === index);
+  let sources: Awaited<ReturnType<typeof searchNotes>>['sources'] = [];
+  let tips: Awaited<ReturnType<typeof extractTips>> = [];
+  const warnings: string[] = [];
+  if (kind === 'food' && chosen.length) {
+    const result = await searchNotes({ ...request, destinations: [city], verifiedFoodNames: chosen.map(place => place.name) }, []);
+    sources = result.sources.map(source => ({ ...source, id: `${city}:custom:${source.id}` }));
+    tips = await extractTips(sources, chosen.map(place => place.name));
+    warnings.push(...result.warnings.map(warning => `${city}自定义饭店检索：${warning}`));
+  }
+  const reasons = new Map(chosen.map(place => [normalize(place.name), '你手动添加并经高德核验的地点。']));
+  const candidates = chosen.map(place => makeCandidate(place, kind, request, reasons, tips, sources));
+  const missing = names.filter(name => !candidates.some(candidate => normalize(candidate.name) === normalize(name)));
+  if (missing.length) warnings.push(`未精确匹配：${missing.join('、')}。请核对名称或补充分店名。`);
+  return { candidates, warnings };
 }

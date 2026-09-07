@@ -1,15 +1,20 @@
 'use client';
 
+import { useState } from 'react';
 import type { DiscoveryCandidate, DiscoveryResult } from '../lib/discovery-types';
+import { parsePlaceNames } from '../lib/place-input.mjs';
 
 const labels = { attraction: '景区', food: '美食', entertainment: '娱乐' };
 const icons = { attraction: '景', food: '味', entertainment: '乐' };
 const stamp = (value: string) => new Date(value).toLocaleString('zh-CN');
 
-export function CandidatePicker({ discovery, selectedIds, busy, error, onToggle, onGenerate }: {
+export function CandidatePicker({ discovery, selectedIds, busy, error, onToggle, onGenerate, onAddCustom }: {
   discovery: DiscoveryResult; selectedIds: string[]; busy: boolean; error: string;
   onToggle: (id: string) => void; onGenerate: () => void;
+  onAddCustom: (city: string, kind: 'attraction' | 'food', names: string[]) => Promise<void>;
 }) {
+  const [custom, setCustom] = useState<Record<string, string>>({});
+  const [customError, setCustomError] = useState<Record<string, string>>({});
   const selected = new Set(selectedIds);
   const missingCities = discovery.request.destinations.filter(city => !discovery.candidates.some(candidate => candidate.city === city && candidate.kind !== 'food' && selected.has(candidate.id)));
   const chosenFood = discovery.candidates.filter(candidate => candidate.kind === 'food' && selected.has(candidate.id)).length;
@@ -19,16 +24,38 @@ export function CandidatePicker({ discovery, selectedIds, busy, error, onToggle,
     {!!discovery.warnings.length && <details className="candidate-warnings"><summary>查看数据提示（{discovery.warnings.length}）</summary>{discovery.warnings.map(warning => <p key={warning}>{warning}</p>)}</details>}
     {discovery.request.destinations.map(city => <section className="candidate-city" key={city}>
       <h3>{city}</h3>
-      {(['attraction', 'food', 'entertainment'] as const).map(kind => {
+      {(['attraction', 'food'] as const).map(kind => {
         const items = discovery.candidates.filter(candidate => candidate.city === city && candidate.kind === kind);
         return <div className="candidate-category" key={kind}><div className="candidate-category-title"><b>{labels[kind]}</b><span>{items.length} 个候选</span></div>
           {items.length ? <div className="candidate-grid">{items.map(candidate => <CandidateCard key={candidate.id} candidate={candidate} checked={selected.has(candidate.id)} onToggle={onToggle} />)}</div> : <p className="candidate-empty">暂无已核验的{labels[kind]}候选。</p>}
+          <CustomPlaceInput city={city} kind={kind} value={custom[`${city}:${kind}`] || ''} busy={busy} error={customError[`${city}:${kind}`] || ''}
+            onChange={value => setCustom(current => ({ ...current, [`${city}:${kind}`]: value }))}
+            onAdd={async names => {
+              const key = `${city}:${kind}`; setCustomError(current => ({ ...current, [key]: '' }));
+              try { await onAddCustom(city, kind, names); setCustom(current => ({ ...current, [key]: '' })); }
+              catch (cause) { setCustomError(current => ({ ...current, [key]: cause instanceof Error ? cause.message : '地点添加失败' })); }
+            }} />
         </div>;
       })}
     </section>)}
-    <div className="selection-bar"><div><b>已选择 {selectedIds.length} 个地点</b><p>{missingCities.length ? `还需为 ${missingCities.join('、')} 选择至少一个景区或娱乐项目。` : `路线基础已满足${chosenFood ? `，其中 ${chosenFood} 家餐厅会优先参与餐次筛选` : '；建议再选择感兴趣的餐厅' }。`}</p></div><button type="button" disabled={busy || !!missingCities.length || !selectedIds.length} onClick={onGenerate}>{busy ? '正在校验并生成路线…' : '用已选地点生成路线 →'}</button></div>
+    <div className="selection-bar"><div><b>已选择 {selectedIds.length} 个地点</b><p>{missingCities.length ? `还需为 ${missingCities.join('、')} 选择至少一个景区。` : `路线基础已满足${chosenFood ? `，其中 ${chosenFood} 家餐厅会优先参与餐次筛选` : '；建议再选择感兴趣的餐厅' }。`}</p></div><button type="button" disabled={busy || !!missingCities.length || !selectedIds.length} onClick={onGenerate}>{busy ? '正在校验并生成路线…' : '用已选地点生成路线 →'}</button></div>
     {error && <p className="error" role="alert">{error}</p>}
   </section>;
+}
+
+function CustomPlaceInput({ city, kind, value, busy, error, onChange, onAdd }: {
+  city: string; kind: 'attraction' | 'food'; value: string; busy: boolean; error: string;
+  onChange: (value: string) => void; onAdd: (names: string[]) => Promise<void>;
+}) {
+  const names = parsePlaceNames(value);
+  const noun = kind === 'attraction' ? '景点' : '饭店';
+  return <div className="custom-place-input">
+    <label>没有想去的{noun}？批量添加
+      <textarea value={value} onChange={event => onChange(event.target.value)} rows={2} maxLength={1200} placeholder={`例如：${kind === 'attraction' ? '雷峰塔、浙江省博物馆' : '楼外楼孤山店、知味观湖滨店'}（支持顿号、逗号或换行）`} />
+    </label>
+    <div><small>将先在高德核验具体地点；同名饭店请写清分店。</small><button type="button" className="secondary" disabled={busy || !names.length} onClick={() => onAdd(names)}>核验并加入候选{names.length ? `（${names.length}）` : ''}</button></div>
+    {error && <p className="error" role="alert">{error}</p>}
+  </div>;
 }
 
 function CandidateCard({ candidate, checked, onToggle }: { candidate: DiscoveryCandidate; checked: boolean; onToggle: (id: string) => void }) {

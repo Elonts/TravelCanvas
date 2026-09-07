@@ -22,7 +22,7 @@ try {
       await page.getByLabel('旅行天数').fill('1');
       await page.getByLabel('旅行预算（元）').fill('6000');
       await page.getByLabel('餐饮偏好').fill('杭帮菜');
-      await page.getByRole('button', { name: /发现景区、美食与娱乐候选/ }).click();
+      await page.getByRole('button', { name: /发现景区与美食候选/ }).click();
       await page.locator('.candidate-panel').waitFor({ timeout: 60000 });
 
       if (mode === 'offline') {
@@ -30,7 +30,11 @@ try {
         assert.equal(await page.getByRole('button', { name: /用已选地点生成路线/ }).isDisabled(), true);
         assert.ok((await page.locator('.candidate-panel').innerText()).includes('高德 部分待确认'));
       } else {
-        for (const label of ['景区 · 杭州', '美食 · 杭州', '娱乐 · 杭州']) {
+        const customAttraction = page.getByText('没有想去的景点？批量添加').locator('..');
+        await customAttraction.getByRole('textbox').fill('雷峰塔、灵隐寺');
+        await customAttraction.getByRole('button', { name: /核验并加入候选/ }).click();
+        await page.getByRole('heading', { name: '雷峰塔', exact: true }).waitFor({ timeout: 60000 });
+        for (const label of ['景区 · 杭州', '美食 · 杭州']) {
           const card = page.locator('.candidate-card').filter({ hasText: label }).first();
           await card.getByRole('button', { name: '加入行程' }).click();
         }
@@ -41,9 +45,14 @@ try {
         await page.locator('.result').waitFor({ timeout: 60000 });
         await page.locator('.route-map').waitFor();
         assert.ok(await page.locator('.map-point-list button').count() >= 3);
-        assert.ok((await page.locator('.map-fallback').innerText()).includes('未配置高德 JS Key'));
+        assert.equal(await page.getByLabel('高德交互式行程路线图').count(), 1);
+        if (await page.locator('.map-fallback').count()) assert.ok((await page.locator('.map-fallback').innerText()).includes('地图'));
         assert.equal(await page.locator('.day-tabs button').count(), 1);
         assert.ok(await page.locator('.day-guide').count() === 1);
+        assert.equal(await page.locator('.sidebar .weather').count(), 0);
+        assert.equal(await page.locator('.sidebar .hotels').count(), 0);
+        assert.ok(await page.getByRole('link', { name: /去携程查看酒店/ }).count() > 0);
+        assert.ok(await page.getByText(/预约提示：预约要求待确认/).count() > 0);
         assert.ok(await page.getByRole('link', { name: /在高德地图打开并导航/ }).count() >= 3);
         const firstNavigation = await page.getByRole('link', { name: /在高德地图打开并导航/ }).first().getAttribute('href');
         assert.ok(firstNavigation.startsWith('https://uri.amap.com/navigation?'));
@@ -62,6 +71,15 @@ try {
         await meal.getByRole('button', { name: '解锁餐厅' }).waitFor();
         assert.equal(await meal.getByRole('button', { name: '更省钱', exact: true }).isDisabled(), true);
         assert.ok(await page.locator('.evidence-tip').count() > 0);
+        const entertainmentSelect = page.getByLabel('更换或删除当天娱乐活动');
+        assert.ok(await entertainmentSelect.count() === 1);
+        const saveDay = page.getByRole('button', { name: '保存修改并重新规划当天路线' });
+        assert.equal(await saveDay.isDisabled(), true);
+        const stopsBeforeEntertainmentRemoval = await page.locator('.day .stop').count();
+        await entertainmentSelect.selectOption('');
+        await Promise.all([page.waitForResponse(response => response.url().includes('/api/plan/day') && response.request().method() === 'POST'), saveDay.click()]);
+        await page.getByText('景点替换和娱乐更改会在点击此按钮后一次生效。').waitFor();
+        assert.equal(await page.locator('.day .stop').count(), stopsBeforeEntertainmentRemoval - 1);
       }
 
       await page.screenshot({ path: `test-artifacts/${mode}-desktop.png`, fullPage: true });

@@ -1,4 +1,5 @@
-export type Stop = { id: string; poiId?: string; city: string; kind?: 'attraction' | 'entertainment'; time: string; name: string; address: string; detail: string; duration: string; durationMinutes?: number; cost: number; costPending?: boolean; indoor: boolean; lng: number; lat: number; verified: boolean; navigationUrl?: string | null; imageUrl?: string | null };
+export type ReservationInfo = { status: 'required' | 'recommended' | 'not_required' | 'unknown'; message: string; sourceUrl?: string | null; queriedAt: string };
+export type Stop = { id: string; poiId?: string; city: string; kind?: 'attraction' | 'entertainment'; time: string; name: string; address: string; detail: string; duration: string; durationMinutes?: number; cost: number; costPending?: boolean; indoor: boolean; lng: number; lat: number; verified: boolean; navigationUrl?: string | null; imageUrl?: string | null; reservation?: ReservationInfo };
 export type Day = { title: string; city: string; date: string; stops: Stop[]; warning?: string };
 const cities: Record<string, Omit<Stop, 'id' | 'city' | 'time' | 'detail' | 'duration' | 'cost'>[]> = {
   北京: [

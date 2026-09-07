@@ -32,15 +32,25 @@ for (const mode of ['fixtures', 'offline']) {
 
     assert.ok(initial.found.value.candidates.some(candidate => candidate.kind === 'attraction'));
     assert.ok(initial.found.value.candidates.some(candidate => candidate.kind === 'food' && candidate.evidence.length));
-    assert.ok(initial.found.value.candidates.some(candidate => candidate.kind === 'entertainment'));
+    assert.ok(initial.found.value.candidates.every(candidate => candidate.kind !== 'entertainment'));
     assert.ok(initial.found.value.candidates.every(candidate => candidate.navigationUrl.startsWith('https://uri.amap.com/navigation')));
     assert.ok(initial.found.value.candidates.some(candidate => candidate.imageUrl?.startsWith('/api/poi-image?url=')));
+    const customAttraction = await post('/api/discover/custom', { discoveryId: initial.found.value.discoveryId, city: '杭州', kind: 'attraction', names: ['雷峰塔'] });
+    assert.equal(customAttraction.status, 200, JSON.stringify(customAttraction.value));
+    assert.ok(customAttraction.value.candidates.some(candidate => candidate.name === '雷峰塔' && candidate.kind === 'attraction'));
+    const customFood = await post('/api/discover/custom', { discoveryId: initial.found.value.discoveryId, city: '杭州', kind: 'food', names: ['测试江南餐厅（西湖店）'] });
+    assert.equal(customFood.status, 200, JSON.stringify(customFood.value));
+    assert.ok(customFood.value.candidates.some(candidate => candidate.name === '测试江南餐厅（西湖店）' && candidate.kind === 'food'));
     assert.equal(initial.generated.status, 200, JSON.stringify(initial.generated.value));
     let plan = initial.generated.value;
     assert.equal(plan.food.meals.length, 2); assert.ok(plan.planId);
     assert.ok(plan.days.flatMap(day => day.stops).every(stop => stop.navigationUrl));
     assert.equal(plan.food.summary.unresolved, 0);
     assert.equal(plan.dayGuides.length, plan.days.length);
+    assert.equal(plan.entertainmentDays.length, plan.days.length);
+    assert.ok(plan.entertainmentDays[0].options.length > 1);
+    assert.ok(plan.days[0].stops.some(stop => stop.kind === 'entertainment'));
+    assert.ok(plan.days[0].stops.filter(stop => stop.kind !== 'entertainment').every(stop => stop.reservation?.status === 'unknown'));
     assert.ok(plan.route.paths.length > 0);
     assert.ok(plan.route.paths.every(path => path.state === 'live'));
     const originalStops = structuredClone(plan.days);
@@ -59,12 +69,21 @@ for (const mode of ['fixtures', 'offline']) {
     assert.equal((await action('select', 'forged-id')).status, 409);
     assert.equal((await post('/api/food', { planId: plan.planId, revision: 0, mealId, action: 'lock' })).status, 409);
 
+    const replacementStop = plan.days[0].stops.find(stop => stop.kind !== 'entertainment');
+    const changedDay = await post('/api/plan/day', { planId: plan.planId, revision: plan.revision, dayIndex: 0, replacements: [{ stopId: replacementStop.id, name: '雷峰塔' }], removedStopIds: [], entertainmentId: null });
+    assert.equal(changedDay.status, 200, JSON.stringify(changedDay.value));
+    plan = changedDay.value;
+    assert.ok(plan.days[0].stops.some(stop => stop.name === '雷峰塔'));
+    assert.equal(plan.days[0].stops.some(stop => stop.kind === 'entertainment'), false);
+    assert.equal(plan.entertainmentDays[0].selectedId, null);
+
     const multi = await generate({ ...fixtureRequest, days: 3 });
     assert.equal(multi.generated.status, 200, JSON.stringify(multi.generated.value));
     const stops = multi.generated.value.days.flatMap(day => day.stops);
     assert.equal(new Set(stops.map(stop => stop.name)).size, stops.length);
-    assert.equal(stops.length, 9);
-    assert.ok(multi.generated.value.days.every(day => day.stops.length === 3));
+    const attractionStops = stops.filter(stop => stop.kind !== 'entertainment');
+    assert.equal(attractionStops.length, 9);
+    assert.ok(multi.generated.value.days.every(day => day.stops.filter(stop => stop.kind !== 'entertainment').length === 3));
     assert.equal(multi.generated.value.food.meals.length, 6);
 
     const failedModel = await generate({ ...fixtureRequest, days: 3, preferences: '模拟AI失败' });

@@ -11,12 +11,20 @@ const candidate = (id, city, kind = 'attraction') => ({ id, city, kind });
 test('discovery store only accepts server-issued candidates and requires a non-food place per city', () => {
   let clock = 1000;
   const store = new DiscoveryStore({ ttl: 100, clock: () => clock });
-  const saved = store.save({ request, candidates: [candidate('hz', '杭州'), candidate('bj', '北京', 'entertainment'), candidate('food', '杭州', 'food')] });
+  const saved = store.save({ request, candidates: [candidate('hz', '杭州'), candidate('bj', '北京'), candidate('food', '杭州', 'food')] });
   assert.deepEqual(store.select(saved.discoveryId, ['hz', 'bj']).candidates.map(item => item.id), ['hz', 'bj']);
   assert.throws(() => store.select(saved.discoveryId, ['hz', 'forged']), /无效候选/);
   assert.throws(() => store.select(saved.discoveryId, ['hz', 'food']), /北京至少选择/);
   clock = 1100;
   assert.throws(() => store.select(saved.discoveryId, ['hz', 'bj']), /过期/);
+});
+
+test('discovery store appends verified custom candidates without duplicating server ids', () => {
+  const store = new DiscoveryStore();
+  const saved = store.save({ request: { destinations: ['杭州'] }, candidates: [candidate('hz', '杭州')], warnings: [], sources: { updatedAt: new Date(0).toISOString() } });
+  const updated = store.append(saved.discoveryId, [candidate('hz', '杭州'), candidate('custom', '杭州', 'food')], ['自定义地点提示']);
+  assert.deepEqual(updated.candidates.map(item => item.id), ['hz', 'custom']);
+  assert.deepEqual(updated.warnings, ['自定义地点提示']);
 });
 
 test('AMap navigation links encode a verified China coordinate and transport mode', () => {
