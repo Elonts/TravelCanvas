@@ -1,5 +1,5 @@
-export type Stop = { id: string; time: string; name: string; address: string; detail: string; duration: string; durationMinutes?: number; cost: number; indoor: boolean; lng: number; lat: number; verified: boolean };
-export type Day = { title: string; date: string; stops: Stop[] };
+export type Stop = { id: string; poiId?: string; time: string; name: string; address: string; detail: string; duration: string; durationMinutes?: number; cost: number; costPending?: boolean; indoor: boolean; lng: number; lat: number; verified: boolean };
+export type Day = { title: string; date: string; stops: Stop[]; warning?: string };
 const cities: Record<string, Omit<Stop, 'id' | 'time' | 'detail' | 'duration' | 'cost'>[]> = {
   北京: [
     { name: '故宫博物院', address: '北京市东城区景山前街4号', indoor: true, lng: 116.397, lat: 39.918, verified: false },
@@ -22,6 +22,6 @@ const cities: Record<string, Omit<Stop, 'id' | 'time' | 'detail' | 'duration' | 
 };
 export function candidateStops(destination: string): Stop[] {
   const key = Object.keys(cities).find(city => destination.includes(city));
-  const source = cities[key || '杭州'];
+  const source = key ? cities[key] : [];
   return source.map((stop, index) => ({ ...stop, id: `stop-${index}`, time: ['09:00','11:30','14:30','17:30'][index], detail: index === 0 ? '作为当天核心体验，建议提前确认预约。' : '与相邻地点安排在同一片区，减少往返。', duration: index === 0 ? '约 2 小时' : '约 1–1.5 小时', cost: [60, 40, 80, 50][index] }));
 }

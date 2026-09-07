@@ -74,10 +74,11 @@ function PlanView({ plan, busy, onAction, changeError }: { plan: Plan; busy: boo
     {changeError && <p className="error change-error" role="alert">{changeError}</p>}
     <div className="layout"><div>{plan.days.map((day, dayIndex) => <article className="day" key={day.date}>
       <h3>{day.title}<small>{day.date}</small></h3>
+      {day.warning && <p className="notice">{day.warning}</p>}
       {day.stops.map((stop, i) => <Fragment key={`${day.date}-${stop.id}`}>
         <div className="stop"><time>{stop.time}</time><div><strong>{stop.name} {stop.verified && <i>地点已校验</i>}</strong><p className="address">⌖ {stop.address}</p><p>{stop.detail}</p><div className="tags"><span>停留 {stop.duration}</span><span>{stop.indoor ? '室内/可避雨' : '户外活动'}</span>{i > 0 && <span>景点按距离排序，未核验完整日程</span>}</div>
           {plan.food.tips.filter(tip => tip.placeName === stop.name).map(tip => <SourceTip key={tip.id} tip={tip} food={plan.food} />)}
-        </div><b>约 ¥{stop.cost}</b></div>
+        </div><b>{stop.costPending ? '费用待确认' : `约 ¥${stop.cost}`}</b></div>
         {plan.food.meals.filter(meal => meal.slot.dayIndex === dayIndex && meal.slot.previous.id === stop.id).map(meal => <MealCard key={meal.slot.id} meal={meal} food={plan.food} busy={busy} onAction={onAction} />)}
       </Fragment>)}
     </article>)}

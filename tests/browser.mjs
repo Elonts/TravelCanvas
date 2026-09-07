@@ -40,6 +40,25 @@ try {
       await page.setViewportSize({ width: 390, height: 844 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'Mobile layout must not overflow');
       await page.screenshot({ path: `test-artifacts/${mode}-mobile.png`, fullPage: true });
+      if (mode === 'fixtures') {
+        // Reproduce the reported three-day bug and the all-pending restaurant state.
+        await page.getByLabel('旅行天数').fill('3');
+        await page.getByLabel('饮食禁忌 / 过敏').fill('花生过敏');
+        const response = page.waitForResponse(r => r.url().endsWith('/api/plan') && r.request().method() === 'POST', { timeout: 60000 });
+        await page.getByRole('button', { name: '生成旅行与美食方案' }).click();
+        assert.equal((await response).status(), 200);
+        await page.waitForFunction(() => document.querySelectorAll('.day').length === 3);
+        const names = await page.locator('.stop strong').allTextContents();
+        assert.equal(names.length, 9); assert.equal(new Set(names).size, 9);
+        assert.equal(await page.locator('.meal').count(), 6);
+        assert.equal(await page.getByText('暂未安排餐厅', { exact: true }).count(), 6);
+        assert.ok(await page.locator('.meal .restaurant h4:visible').count() >= 6, 'Specific restaurant names must be visible without expanding details');
+        assert.ok(await page.getByText('具体门店建议 · 需确认后安排', { exact: true }).count() > 0);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        await page.locator('.meal').first().screenshot({ path: 'test-artifacts/multiday-food-mobile.png' });
+        await page.setViewportSize({ width: 1440, height: 1000 });
+        await page.locator('.day').first().screenshot({ path: 'test-artifacts/multiday-day-desktop.png' });
+      }
       assert.deepEqual(errors, []);
       console.log(`PASS browser: ${mode}, desktop/mobile, no client errors`);
     } finally { await page.close(); server.stop(); }

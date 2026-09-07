@@ -11,14 +11,20 @@ export async function fixtureFetch(input, options = {}) {
   if (url.hostname === 'api.tavily.com') return reply({ results: [{ title: '杭州美食经验（测试）', url: 'https://www.xiaohongshu.com/explore/abcdef123', content: fixtureContent, published_date: '2026-09-01' }] });
   if (url.hostname === 'api.deepseek.com') {
     const body = JSON.parse(options.body);
+    if (body.messages[1].content.includes('模拟AI失败')) throw Error('Simulated model outage');
     const extraction = body.messages[0].content.includes('不可信资料');
-    const content = extraction ? { tips: [{ sourceId: 'search-0', placeName: '测试江南餐厅（西湖店）', quote: '测试江南餐厅（西湖店）在美食推荐榜中被提到，建议提前取号', category: 'ranking' }, { sourceId: 'search-0', placeName: '西湖风景名胜区', quote: '西湖风景名胜区步行距离较长，建议穿舒适鞋', category: 'travel' }] } : { places: ['西湖风景名胜区', '中国茶叶博物馆（双峰馆区）', '灵隐寺', '河坊街'] };
+    const count = Number(body.messages[1].content.match(/推荐 (\d+) 个/)?.[1] || 4);
+    const places = ['西湖风景名胜区', '中国茶叶博物馆（双峰馆区）', '灵隐寺', '河坊街', ...Array.from({ length: 26 }, (_, i) => `测试景点${i + 5}`)];
+    const content = extraction ? { tips: [{ sourceId: 'search-0', placeName: '测试江南餐厅（西湖店）', quote: '测试江南餐厅（西湖店）在美食推荐榜中被提到，建议提前取号', category: 'ranking' }, { sourceId: 'search-0', placeName: '西湖风景名胜区', quote: '西湖风景名胜区步行距离较长，建议穿舒适鞋', category: 'travel' }] } : { places: places.slice(0, count) };
     return reply({ choices: [{ message: { content: JSON.stringify(content) } }] });
   }
   if (url.hostname === 'restapi.amap.com') {
     if (url.pathname.includes('/place/')) {
       if (url.searchParams.get('types') === '050000') return reply({ status: '1', pois: Array.from({ length: 6 }, (_, i) => poi(i)) });
-      return reply({ status: '1', pois: [{ id: 'attraction', name: url.searchParams.get('keywords'), address: '杭州测试景点地址', location: '120.1,30.2' }] });
+      if (url.searchParams.get('types') === '110000') return reply({ status: '1', pois: Array.from({ length: 12 }, (_, i) => ({
+        id: `supplement-${i}`, name: `地图补充公园${i}`, address: '杭州测试景点地址', location: '120.1,30.2', typecode: '110101',
+      })) });
+      return reply({ status: '1', pois: [{ id: `attraction-${url.searchParams.get('keywords')}`, name: url.searchParams.get('keywords'), address: '杭州测试景点地址', location: '120.1,30.2' }] });
     }
     const lngs = [url.searchParams.get('origin'), url.searchParams.get('destination')].map(s => Number(s.split(',')[0]));
     const index = lngs.map(lng => Math.round((lng - 120.101) * 1000)).find(i => i >= 0 && i < 6);

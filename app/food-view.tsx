@@ -49,6 +49,8 @@ export function MealCard({ meal, food, busy, onAction }: { meal: Meal; food: Foo
   const used = new Set(food.meals.filter(m => m.slot.id !== meal.slot.id).map(m => m.selectedId));
   const alternatives = meal.options.filter(o => o.eligible && o.restaurant.id !== meal.selectedId && !used.has(o.restaurant.id)).slice(0, 2);
   const pending = meal.options.filter(o => !o.eligible);
+  const visibleSuggestions = !selected ? pending.filter(o => !used.has(o.restaurant.id)).slice(0, 2) : [];
+  const remainingPending = pending.filter(o => !visibleSuggestions.includes(o));
   return <section className="meal" aria-label={`${meal.slot.date}${meal.slot.label}`}>
     <div className="meal-heading"><div><span className="eyebrow">本次行程推荐 · {meal.slot.label}</span><h3>{meal.slot.previous.name}之后，安排一顿好饭</h3></div>{meal.locked && <span className="lock-badge">已锁定</span>}</div>
     <p className="meal-context">{clockTime(meal.slot.earliest)}–{clockTime(meal.slot.latest)} · 全员本餐上限 ¥{meal.slot.foodLimit} · 新增交通预留 ¥{meal.slot.transportLimit}<br />{meal.slot.next ? `下一站：${meal.slot.next.name}（${meal.slot.next.time}）` : '当天最后一站后用餐，未计返回酒店行程'}</p>
@@ -58,9 +60,10 @@ export function MealCard({ meal, food, busy, onAction }: { meal: Meal; food: Foo
         <button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'closer')}>更顺路</button>
         <button type="button" className="secondary" disabled={busy} onClick={() => onAction(meal.slot.id, 'lock')}>{meal.locked ? '解锁餐厅' : '锁定这家'}</button>
       </div>
-    </RestaurantOption> : <div className="empty-meal"><b>暂未安排餐厅</b><p>{meal.options.length ? '现有候选没有同时满足预算、路线、时段与饮食条件，或已安排在其他餐次。可查看原因后调整需求。' : '尚无已核验的门店和路线。配置地图服务后重新生成，或补充更明确的目的地与帖子内容。'}</p></div>}
+    </RestaurantOption> : <div className="empty-meal"><b>暂未安排餐厅</b><p>{meal.options.length ? '已找到以下具体门店，但尚未同时满足所有条件。请查看费用、路线和待确认项；未选中的门店不计入已安排预算。' : '尚无已核验的门店和路线。地图查询暂不可用或该行程地点未确认，请稍后重试。'}</p></div>}
+    {visibleSuggestions.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label={option.reasons.length ? '具体门店 · 当前条件不匹配' : '具体门店建议 · 需确认后安排'} />)}
     {!!alternatives.length && <details className="alternatives"><summary>备选餐厅（{alternatives.length}）</summary>{alternatives.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label="可选替代"><button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'select', option.restaurant.id)}>选择这家并重算</button></RestaurantOption>)}</details>}
-    {!!pending.length && <details className="alternatives"><summary>查看待确认或不符合条件的候选（{pending.length}）</summary>{pending.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label="未入选候选" />)}</details>}
+    {!!remainingPending.length && <details className="alternatives"><summary>查看其他待确认或不符合条件的候选（{remainingPending.length}）</summary>{remainingPending.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label="未入选候选" />)}</details>}
   </section>;
 }
 
@@ -72,6 +75,6 @@ export function FoodSummary({ plan }: { plan: Plan }) {
     <p className="line"><span>已选午晚餐估算</span><b>¥{summary.selectedLow}–{summary.selectedHigh}</b></p>
     <p className="line"><span>未使用餐饮分配</span><b>¥{summary.remaining}</b></p>
     <p className="line"><span>新增交通估算</span><b>¥{summary.extraTransport}</b></p>
-    <p>{summary.unresolved ? `还有 ${summary.unresolved} 餐待安排，当前费用不是完整餐饮总价。` : '所有午晚餐已按参考数据安排；实际消费仍需确认。'} 新增交通计入交通分配，不重复加到总预算。其他交通、住宿和门票仍是预算预留。</p>
+    <p>{!plan.food.meals.length ? '缺少可安排用餐的行程地点，请补充地点后重新生成。' : summary.unresolved ? `还有 ${summary.unresolved} 餐待安排，当前费用不是完整餐饮总价。` : '所有午晚餐已按参考数据安排；实际消费仍需确认。'} 新增交通计入交通分配，不重复加到总预算。其他交通、住宿和门票仍是预算预留。</p>
   </div>;
 }

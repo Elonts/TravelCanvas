@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { attachEvidence, buildFoodPlan, createMapProvider, extractTips, normalizeRestaurant, safeSourceUrl, searchNotes, validateExtraction } from '../lib/food-providers.mjs';
+import { attachEvidence, buildFoodPlan, createMapProvider, extractTips, isMealRestaurant, normalizeRestaurant, safeSourceUrl, searchNotes, validateExtraction } from '../lib/food-providers.mjs';
 import { allocateBudget } from '../lib/food.mjs';
 import { fixtureRequest as request, fixtureDays as days, fixtureFetch, testEnv, poi, fixtureContent } from './helpers/food-fixture.mjs';
 
@@ -88,4 +88,49 @@ test('transient map QPS failures retry; invalid credentials do not retry', async
   const invalid = createMapProvider(testEnv, async () => { calls++; return new Response('{"status":"0","infocode":"10001"}'); }, { intervalMs: 0 });
   assert.equal((await invalid.route(days[0].stops[0], days[0].stops[1], 'walk', '杭州')).state, 'pending');
   assert.equal(calls, 1);
+});
+
+test('restaurant search covers both ends of a lunch route and reads beyond eight results', async () => {
+  const anchors = [];
+  const map = createMapProvider(testEnv, async (url, options) => {
+    const parsed = new URL(url);
+    if (parsed.pathname.endsWith('/around')) {
+      anchors.push(parsed.searchParams.get('location'));
+      assert.equal(parsed.searchParams.get('page_size'), '20');
+    }
+    return fixtureFetch(url, options);
+  }, { intervalMs: 0 });
+  await map.restaurants({ previous: days[0].stops[0], next: days[0].stops[1] }, '杭州', []);
+  assert.deepEqual(anchors, ['120.1,30.2', '120.2,30.2']);
+});
+
+test('restaurant pool with expensive first page still produces a specific affordable choice', async () => {
+  const fetcher = async (url, options) => {
+    if (new URL(url).pathname.endsWith('/around')) {
+      const expensive = Array.from({ length: 8 }, (_, i) => ({ ...poi(3), id: `expensive-${i}` }));
+      return new Response(JSON.stringify({ status: '1', pois: [...expensive, poi(0), poi(1), poi(2)] }));
+    }
+    return fixtureFetch(url, options);
+  };
+  const food = await buildFoodPlan(request, days, allocateBudget(request), { AMAP_API_KEY: testEnv.AMAP_API_KEY }, fetcher, { mapIntervalMs: 0 });
+  assert.equal(food.summary.unresolved, 0);
+  assert.ok(food.meals.every(meal => meal.options.find(o => o.restaurant.id === meal.selectedId)?.eligible));
+});
+
+test('cheap milk tea and coffee shops cannot become lunch or dinner recommendations', () => {
+  assert.equal(isMealRestaurant({ name: '茶百道(某分店)', category: '餐饮服务;休闲餐饮场所;休闲餐饮场所' }), false);
+  assert.equal(isMealRestaurant({ name: '测试咖啡厅', category: '餐饮服务;咖啡厅' }), false);
+  assert.equal(isMealRestaurant({ name: '玉泉里餐厅', category: '餐饮服务;餐饮相关场所;餐饮相关' }), true);
+  assert.equal(isMealRestaurant({ name: '翠薇面斋', category: '餐饮服务;中餐厅;中式素菜馆' }), true);
+  assert.equal(isMealRestaurant({ name: '不明店铺', category: '餐饮服务;餐饮相关场所' }), false);
+});
+
+test('map can supplement an unavailable AI without accepting restaurant POIs as attractions', async () => {
+  const provider = createMapProvider(testEnv, async () => new Response(JSON.stringify({ status: '1', pois: [
+    { id: 'park', name: '测试公园', address: '杭州', location: '120.1,30.2', typecode: '110101' },
+    { id: 'food', name: '测试餐厅', address: '杭州', location: '120.1,30.2', typecode: '050100' },
+  ] })), { intervalMs: 0 });
+  const stops = await provider.attractions('杭州', 9);
+  assert.ok(stops.length > 0);
+  assert.ok(stops.every(stop => stop.poiId === 'park' && stop.verified && stop.costPending));
 });

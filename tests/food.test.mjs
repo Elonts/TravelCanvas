@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { allocateBudget, createMealSlots, evaluateRestaurant, isOpenDuring, changeMeal, summarizeFood } from '../lib/food.mjs';
+import { allocateBudget, createMealSlots, evaluateRestaurant, isOpenDuring, changeMeal, summarizeFood, shortlistRestaurants } from '../lib/food.mjs';
 import { requestSchema, readJson } from '../lib/requests.mjs';
 import { PlanStore } from '../lib/plan-store.mjs';
 
@@ -94,4 +94,13 @@ test('schema rejects impossible dates, oversized notes, forged links and missing
   assert.equal(requestSchema.safeParse({ ...request, noteUrl: 'https://evil.com/a' }).success, false);
   assert.equal(requestSchema.safeParse({ ...request, travelers: 0 }).success, false);
   await assert.rejects(readJson(new Request('http://localhost', { method: 'POST', body: 'x'.repeat(100) }), 10), /过长/);
+});
+
+test('affordable full-meal candidates beyond the first eight POIs make the route shortlist', () => {
+  const expensive = Array.from({ length: 8 }, (_, i) => ({ ...restaurant, id: `expensive-${i}`, price: { low: 1000, high: 1200 } }));
+  const affordable = { ...restaurant, id: 'affordable' };
+  const ranked = shortlistRestaurants([...expensive, affordable], slot, request);
+  assert.equal(ranked[0].id, 'affordable');
+  const unused = { ...affordable, id: 'unused' };
+  assert.equal(shortlistRestaurants([affordable, unused], slot, request, new Set(['affordable']))[0].id, 'unused');
 });

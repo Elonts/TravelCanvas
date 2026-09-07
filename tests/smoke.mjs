@@ -35,6 +35,29 @@ for (const mode of ['fixtures', 'offline']) {
       const stale = await post('/api/food', { planId: plan.planId, revision: 0, mealId, action: 'lock' }); assert.equal(stale.status, 409);
       assert.equal(plan.food.tips.length, 2);
     }
-    console.log(`PASS production HTTP smoke: ${mode}`);
+    const multi = await post('/api/plan', { ...fixtureRequest, days: 3 });
+    assert.equal(multi.status, 200);
+    const stops = multi.value.days.flatMap(day => day.stops);
+    assert.equal(new Set(stops.map(stop => stop.name)).size, stops.length);
+    if (mode === 'fixtures') {
+      assert.equal(stops.length, 9);
+      assert.ok(multi.value.days.every(day => day.stops.length === 3));
+      assert.equal(multi.value.food.meals.length, 6);
+      assert.ok(multi.value.food.meals.every(meal => meal.options.length > 0));
+      const failedModel = await post('/api/plan', { ...fixtureRequest, days: 3, preferences: '模拟AI失败' });
+      assert.equal(failedModel.status, 200);
+      const recovered = failedModel.value.days.flatMap(day => day.stops);
+      assert.equal(recovered.length, 9);
+      assert.equal(new Set(recovered.map(stop => stop.poiId)).size, 9);
+      assert.ok(recovered.some(stop => stop.id.startsWith('map-')));
+      assert.equal(failedModel.value.sources.ai, 'demo');
+    } else assert.ok(multi.value.days.every(day => day.warning));
+    if (mode === 'offline') {
+      const unknown = await post('/api/plan', { ...fixtureRequest, destination: '广州', days: 3 });
+      assert.equal(unknown.status, 200);
+      assert.ok(unknown.value.days.every(day => day.stops.length === 0 && day.warning));
+      assert.equal(unknown.value.food.meals.length, 0);
+    }
+    console.log(`PASS production HTTP smoke: ${mode}, one and three days`);
   } finally { server.stop(); }
 }
