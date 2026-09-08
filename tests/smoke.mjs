@@ -79,6 +79,7 @@ for (const mode of ['fixtures', 'offline']) {
     const footMassageOptions = plan.entertainmentDays[0].options.filter(option => option.preference === '足浴');
     assert.ok(footMassageOptions.length > 6);
     assert.ok(footMassageOptions.length <= 12);
+    assert.ok(footMassageOptions.every(option => option.routeMeters !== null && option.routeMeters <= 15000));
     const entertainmentId = footMassageOptions[0].id;
     const addedEntertainment = await post('/api/plan/day', { planId: plan.planId, revision: plan.revision, dayIndex: 0, replacements: [], removedStopIds: [], entertainmentIds: [entertainmentId] });
     assert.equal(addedEntertainment.status, 200, JSON.stringify(addedEntertainment.value));

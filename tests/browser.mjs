@@ -89,6 +89,7 @@ try {
         const venue = page.getByLabel('推荐的具体地点');
         await venue.waitFor();
         assert.ok(await venue.locator('option').count() > 7);
+        assert.match((await venue.locator('option').nth(1).innerText()), /距离 0\.6 公里/);
         const venueValue = await venue.locator('option').nth(1).getAttribute('value');
         assert.ok(venueValue);
         await venue.selectOption(venueValue);

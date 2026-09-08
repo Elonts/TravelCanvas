@@ -8,7 +8,7 @@ import { recommendHotels } from './hotels.mjs';
 import type { FoodPlan, Restaurant } from './food-types';
 import { verifyDayReservations } from './reservations.mjs';
 import { amapImageAttribution, fillMissingWebImages } from './web-images.mjs';
-import { ENTERTAINMENT_TYPES } from './entertainment';
+import { ENTERTAINMENT_RADIUS_METERS, ENTERTAINMENT_TYPES } from './entertainment';
 
 const normalize = (value: string) => value.replace(/[\s（）()·]/g, '').toLowerCase();
 const rebuildFoodPlan = buildFoodPlan as unknown as (request: Plan['request'], days: Plan['days'], budget: Plan['budget'], env: NodeJS.ProcessEnv, fetcher: typeof fetch, options: { mapIntervalMs: number; preferredRestaurants: Restaurant[]; discoverySources: FoodPlan['sources'] }) => Promise<FoodPlan>;
@@ -104,10 +104,10 @@ export async function searchEntertainment(plan: Plan, input: { dayIndex: number;
       time: '19:30', detail: `按“${activity}${input.preference !== '其他' && input.query ? ` · ${input.query}` : ''}”查询并结合当天路线筛选；营业和消费请确认。`, duration: '约 1.5 小时', durationMinutes: 90,
       cost: 0, costPending: true, indoor: true, routeMinutes: route.minutes, routeMeters: route.meters, preference: input.preference === '其他' ? `其他：${activity}` : input.preference };
   }));
-  const found = await fillMissingWebImages(routed.filter(option => option.routeMinutes !== null && option.routeMinutes <= 45).sort((a, b) => (a.routeMinutes ?? 999) - (b.routeMinutes ?? 999)).slice(0, 12), process.env, fetch);
+  const found = await fillMissingWebImages(routed.filter(option => option.routeMeters !== null && option.routeMeters <= ENTERTAINMENT_RADIUS_METERS).sort((a, b) => (a.routeMeters ?? Infinity) - (b.routeMeters ?? Infinity) || (a.routeMinutes ?? Infinity) - (b.routeMinutes ?? Infinity)).slice(0, 12), process.env, fetch);
   const entertainmentDays = plan.entertainmentDays.map((value, index) => index === input.dayIndex ? {
     ...value, anchorName: anchor.name, selectedIds: input.selectedIds, options: [...value.options.filter(option => input.preference === '其他' ? !option.preference.startsWith('其他：') : option.preference !== input.preference), ...found],
-    warning: found.length ? found.length < 4 ? `在 45 分钟顺路范围内仅核验到 ${found.length} 个${activity}地点，可补充区域或店名再次查询。` : undefined : `没有找到距当天路线 45 分钟以内的${activity}地点。`,
+    warning: found.length ? found.length < 4 ? `在当天路线 15 公里范围内仅核验到 ${found.length} 个${activity}地点，可补充区域或店名再次查询。` : undefined : `没有找到距当天路线 15 公里以内的${activity}地点。`,
   } : value);
   return { ...plan, entertainmentDays, sources: { ...plan.sources, updatedAt: new Date().toISOString() } };
 }
