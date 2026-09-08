@@ -41,5 +41,5 @@ export type FoodPlan = {
   meals: Meal[]; sources: EvidenceSource[]; tips: EvidenceTip[]; warnings: string[];
   searchState: 'live' | 'pending'; queriedAt: string;
   summary: { allocated: number; breakfastReserve: number; selectedLow: number;
-    selectedHigh: number; extraTransport: number; unresolved: number; remaining: number };
+    selectedHigh: number; selectedCostPending: number; extraTransport: number; unresolved: number; remaining: number };
 };

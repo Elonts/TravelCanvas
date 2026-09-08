@@ -151,6 +151,16 @@ test('restaurant search covers both ends of a lunch route and reads beyond eight
   await map.restaurants({ previous: days[0].stops[0], next: days[0].stops[1] }, '杭州', []);
   assert.deepEqual(anchors, ['120.1,30.2', '120.2,30.2']);
 });
+test('food preferences become explicit AMap text-search keywords', async () => {
+  const keywords = [];
+  const map = createMapProvider(testEnv, async (url, options) => {
+    const parsed = new URL(url);
+    if (parsed.pathname.endsWith('/text')) keywords.push(parsed.searchParams.get('keywords'));
+    return fixtureFetch(url, options);
+  }, { intervalMs: 0 });
+  await map.restaurants({ previous: days[0].stops[0], next: days[0].stops[1] }, '杭州', ['川菜', '四川菜', '麻辣']);
+  assert.deepEqual(keywords, ['川菜', '四川菜', '麻辣']);
+});
 
 test('restaurant pool with expensive first page still produces a specific affordable choice', async () => {
   const fetcher = async (url, options) => {

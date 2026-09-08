@@ -4,7 +4,7 @@ import type { Plan } from '../lib/plan';
 import type { EvidenceTip, FoodPlan, Meal, MealOption } from '../lib/food-types';
 import { clockTime } from '../lib/food.mjs';
 
-export type MealAction = (mealId: string, action: 'lock' | 'cheaper' | 'closer' | 'select', restaurantId?: string) => void;
+export type MealAction = (mealId: string, action: 'lock' | 'cheaper' | 'closer' | 'select' | 'selectAndLock', restaurantId?: string) => void;
 const stamp = (value: string) => new Date(value).toLocaleString('zh-CN');
 
 export function SourceTip({ tip, food }: { tip: EvidenceTip; food: FoodPlan }) {
@@ -64,9 +64,9 @@ export function MealCard({ meal, food, busy, onAction }: { meal: Meal; food: Foo
         <button type="button" className="secondary" disabled={busy} onClick={() => onAction(meal.slot.id, 'lock')}>{meal.locked ? '解锁餐厅' : '锁定这家'}</button>
       </div>
     </RestaurantOption> : <div className="empty-meal"><b>暂未安排餐厅</b><p>{meal.options.length ? '已找到以下具体门店，但尚未同时满足所有条件。请查看费用、路线和待确认项；未选中的门店不计入已安排预算。' : '尚无已核验的门店和路线。地图查询暂不可用或该行程地点未确认，请稍后重试。'}</p></div>}
-    {visibleSuggestions.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label={option.reasons.length ? '具体门店 · 当前条件不匹配' : '具体门店建议 · 需确认后安排'}>{option.canAcceptPending && <div className="confirmation-actions"><button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'select', option.restaurant.id)}>接受待确认并安排</button></div>}</RestaurantOption>)}
+    {visibleSuggestions.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label={option.reasons.length ? '具体门店 · 当前条件不匹配' : '具体门店建议 · 需确认后安排'}>{option.canAcceptPending && <div className="confirmation-actions"><button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'selectAndLock', option.restaurant.id)}>了解提示，仍要选择并锁定</button></div>}</RestaurantOption>)}
     {!!alternatives.length && <details className="alternatives"><summary>备选餐厅（{alternatives.length}）</summary>{alternatives.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label="可选替代"><button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'select', option.restaurant.id)}>选择这家并重算</button></RestaurantOption>)}</details>}
-    {!!remainingPending.length && <details className="alternatives"><summary>查看其他待确认或不符合条件的候选（{remainingPending.length}）</summary>{remainingPending.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label="未入选候选">{option.canAcceptPending && <div className="confirmation-actions"><button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'select', option.restaurant.id)}>接受待确认并安排</button></div>}</RestaurantOption>)}</details>}
+    {!!remainingPending.length && <details className="alternatives"><summary>查看其他待确认或不符合条件的候选（{remainingPending.length}）</summary>{remainingPending.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label="未入选候选">{option.canAcceptPending ? <div className="confirmation-actions"><button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'selectAndLock', option.restaurant.id)}>了解提示，仍要选择并锁定</button></div> : <p className="constraint-note">存在明确饮食禁忌冲突，不能强制安排。</p>}</RestaurantOption>)}</details>}
   </section>;
 }
 
@@ -75,8 +75,8 @@ export function FoodSummary({ plan }: { plan: Plan }) {
   return <div className="card"><span className="eyebrow">餐饮预算 · 全员</span>
     <p className="line"><span>餐饮总分配</span><b>¥{summary.allocated}</b></p>
     <p className="line"><span>早餐与零食预留</span><b>¥{summary.breakfastReserve}</b></p>
-    <p className="line"><span>已选午晚餐估算</span><b>¥{summary.selectedLow}–{summary.selectedHigh}</b></p>
-    <p className="line"><span>未使用餐饮分配</span><b>¥{summary.remaining}</b></p>
+    <p className="line"><span>已选午晚餐估算</span><b>{summary.selectedCostPending ? summary.selectedHigh > 0 ? `已知 ¥${summary.selectedLow}–${summary.selectedHigh}，另有 ${summary.selectedCostPending} 餐待确认` : `${summary.selectedCostPending} 餐价格待确认（不是 ¥0）` : `¥${summary.selectedLow}–${summary.selectedHigh}`}</b></p>
+    <p className="line"><span>{summary.remaining < 0 ? '按已知价格预计超出' : '按已知价格剩余'}</span><b>{summary.remaining < 0 ? `¥${Math.abs(summary.remaining)}` : `¥${summary.remaining}`}</b></p>
     <p className="line"><span>新增交通估算</span><b>¥{summary.extraTransport}</b></p>
     <p>{!plan.food.meals.length ? '缺少可安排用餐的行程地点，请补充地点后重新生成。' : summary.unresolved ? `还有 ${summary.unresolved} 餐待安排，当前费用不是完整餐饮总价。` : '所有午晚餐已按参考数据安排；实际消费仍需确认。'} 新增交通计入交通分配，不重复加到总预算。其他交通、住宿和门票仍是预算预留。</p>
   </div>;

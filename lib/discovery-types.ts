@@ -15,6 +15,7 @@ export type DiscoveryCandidate = {
   price: { low: number; high: number } | null; hours: string;
   source: string; queriedAt: string; verified: true; navigationUrl: string;
   evidence: DiscoveryEvidence[]; evidenceScore: number; featuredDishes?: string[];
+  preferenceFitScore?: number; constraintWarning?: string;
 };
 
 export type DiscoveryResult = {

@@ -35,6 +35,12 @@ for (const mode of ['fixtures', 'offline']) {
     assert.ok(initial.found.value.candidates.every(candidate => candidate.kind !== 'entertainment'));
     assert.ok(initial.found.value.candidates.every(candidate => candidate.navigationUrl.startsWith('https://uri.amap.com/navigation')));
     assert.ok(initial.found.value.candidates.some(candidate => candidate.imageUrl?.startsWith('/api/poi-image?url=')));
+    const senior = await discover({ ...fixtureRequest, preferences: '适合老年人活动', constraints: '少走路，不爬山' });
+    assert.equal(senior.status, 200, JSON.stringify(senior.value));
+    const seniorAttractions = senior.value.candidates.filter(candidate => candidate.kind === 'attraction');
+    assert.ok(seniorAttractions.some(candidate => /博物馆|公园|文化馆/.test(candidate.name)));
+    assert.ok(seniorAttractions.every(candidate => !/攀岩|漂流|蹦极|高空/.test(candidate.name)));
+    assert.ok(seniorAttractions.some(candidate => candidate.constraintWarning?.includes('步行距离')));
     const customAttraction = await post('/api/discover/custom', { discoveryId: initial.found.value.discoveryId, city: '杭州', kind: 'attraction', names: ['雷峰塔'] });
     assert.equal(customAttraction.status, 200, JSON.stringify(customAttraction.value));
     assert.ok(customAttraction.value.candidates.some(candidate => candidate.name === '雷峰塔' && candidate.kind === 'attraction'));

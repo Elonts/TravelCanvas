@@ -15,7 +15,7 @@ export async function fixtureFetch(input, options = {}) {
     const extraction = body.messages[0].content.includes('不可信资料');
     const discovery = body.messages[0].content.includes('旅行候选发现助手');
     const count = Number(body.messages[1].content.match(/推荐 (\d+) 个/)?.[1] || 4);
-    const places = ['西湖风景名胜区', '中国茶叶博物馆（双峰馆区）', '灵隐寺', '河坊街', ...Array.from({ length: 26 }, (_, i) => `测试景点${i + 5}`)];
+    const places = body.messages[1].content.includes('老年人') ? ['峡谷高空攀岩', '城市博物馆', '湖滨公园', '历史文化馆'] : ['西湖风景名胜区', '中国茶叶博物馆（双峰馆区）', '灵隐寺', '河坊街', ...Array.from({ length: 26 }, (_, i) => `测试景点${i + 5}`)];
     const sourceId = extraction ? JSON.parse(body.messages[1].content)[0]?.id || 'search-0' : 'search-0';
     const content = extraction ? { tips: [{ sourceId, placeName: '测试江南餐厅（西湖店）', quote: '测试江南餐厅（西湖店）在美食推荐榜中被提到，建议提前取号', category: 'ranking' }, { sourceId, placeName: '西湖风景名胜区', quote: '西湖风景名胜区步行距离较长，建议穿舒适鞋', category: 'travel' }] }
       : discovery ? { attractions: places.slice(0, 4).map(name => ({ name, reason: '符合测试旅行偏好，地点仍需高德核验。' })), entertainment: ['测试剧场', '测试乐园', '测试文化馆'].map(name => ({ name, reason: '适合轻松体验，营业信息待确认。' })) }

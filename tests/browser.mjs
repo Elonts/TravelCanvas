@@ -39,6 +39,8 @@ try {
           const card = page.locator('.candidate-card').filter({ hasText: label }).first();
           await card.getByRole('button', { name: '加入行程' }).click();
         }
+        const unknownFood = page.locator('.candidate-card').filter({ hasText: '测试未知餐厅（西湖店）' });
+        await unknownFood.getByRole('button', { name: '加入行程' }).click();
         assert.ok(await page.locator('.candidate-image img').count() >= 3);
         await page.waitForFunction(() => [...document.querySelectorAll('.candidate-image img')].slice(0, 3).every(image => image.complete && image.naturalWidth > 0));
         assert.ok(await page.getByText(/小红书公开笔记证据/).count() > 0);
@@ -62,6 +64,9 @@ try {
         await mapPoint.click();
         assert.ok((await page.locator('.map-popover').innerText()).includes(mapPointName));
         assert.equal(await page.locator('.meal').count(), 2);
+        const foodSummaryText = await page.locator('.sidebar .card').filter({ hasText: '餐饮预算 · 全员' }).innerText();
+        assert.match(foodSummaryText, /餐价格待确认（不是 ¥0）|另有 \d+ 餐待确认/);
+        assert.ok(await page.getByText(/匹配口味：杭帮菜/).count() > 0);
         const meal = page.locator('.meal').first();
         if (await meal.getByRole('button', { name: '解锁餐厅' }).count()) await meal.getByRole('button', { name: '解锁餐厅' }).click();
         const before = await meal.locator('h4').first().innerText();
@@ -72,6 +77,17 @@ try {
         await meal.getByRole('button', { name: '解锁餐厅' }).waitFor();
         assert.equal(await meal.getByRole('button', { name: '更省钱', exact: true }).isDisabled(), true);
         assert.ok(await page.locator('.evidence-tip').count() > 0);
+        await meal.getByRole('button', { name: '解锁餐厅' }).click();
+        const pendingRestaurants = meal.locator('details.alternatives').filter({ hasText: '查看其他待确认或不符合条件的候选' });
+        await pendingRestaurants.locator(':scope > summary').click();
+        const expensiveRestaurant = pendingRestaurants.locator('.restaurant').filter({ hasText: '测试昂贵餐厅' });
+        await Promise.all([
+          page.waitForResponse(response => response.url().includes('/api/food') && response.request().method() === 'POST'),
+          expensiveRestaurant.getByRole('button', { name: '了解提示，仍要选择并锁定' }).click()
+        ]);
+        await meal.getByRole('button', { name: '解锁餐厅' }).waitFor();
+        assert.ok((await meal.innerText()).includes('全员本餐费用超过分配预算'));
+        assert.ok(await page.getByText('按已知价格预计超出').count() > 0);
         const entertainmentType = page.getByLabel('娱乐项目');
         assert.ok(await entertainmentType.count() === 1);
         for (const option of ['台球', '足浴', '剧本杀', '酒馆']) assert.ok((await entertainmentType.locator('option').allTextContents()).includes(option));

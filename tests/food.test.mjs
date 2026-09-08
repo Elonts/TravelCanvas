@@ -48,13 +48,30 @@ test('missing or empty price, route, fare and hours never satisfy constraints', 
   assert.equal(evaluate(restaurant, slot, request, [{ ...leg(0), minutes: null, state: 'pending' }]).eligible, false);
   assert.equal(evaluate(restaurant, slot, request, [leg(5, null), leg(5)], leg(5)).eligible, false);
 });
-test('unknown data is explicitly acceptible while hard conflicts remain blocked', () => {
+test('unknown data is explicitly acceptable while hard conflicts remain blocked', () => {
   const unknown = evaluate({ ...restaurant, price: null, hours: '' }, slot, request, [{ ...leg(0), state: 'pending', minutes: null }]);
   assert.equal(unknown.eligible, false); assert.equal(unknown.canAcceptPending, true);
   const conflict = evaluate({ ...restaurant, price: { low: 9999, high: 9999 } }, slot, request);
   assert.equal(conflict.canAcceptPending, true); assert.equal(conflict.hardBlocked, false); assert.ok(conflict.reasons.length);
   const allergy = evaluate({ ...restaurant, name: '牛肉面馆' }, slot, { ...request, dietary: '不吃牛肉' });
   assert.equal(allergy.canAcceptPending, false); assert.equal(allergy.hardBlocked, true);
+});
+test('unknown prices are reported as pending instead of zero', () => {
+  const unknown = evaluate({ ...restaurant, price: null });
+  const pendingFood = { ...food, meals: [{ ...food.meals[0], options: [unknown], selectedId: unknown.restaurant.id }] };
+  const summary = summarizeFood(pendingFood);
+  assert.equal(summary.selectedHigh, 0);
+  assert.equal(summary.selectedCostPending, 1);
+});
+test('a soft budget conflict can be explicitly selected and locked with its warning preserved', () => {
+  const expensive = evaluate({ ...restaurant, id: 'expensive', price: { low: 2000, high: 2200 } });
+  assert.match(expensive.reasons.join(), /超过分配预算/);
+  assert.equal(expensive.canAcceptPending, true);
+  const unlocked = { ...food, meals: [{ ...food.meals[0], options: [...food.meals[0].options, expensive] }] };
+  const changed = changeMeal(unlocked, slot.id, 'selectAndLock', 'expensive');
+  assert.equal(changed.meals[0].selectedId, 'expensive');
+  assert.equal(changed.meals[0].locked, true);
+  assert.ok(changed.summary.remaining < 0);
 });
 test('opening ranges cover entire meal and parse overnight conservatively', () => {
   assert.equal(isOpenDuring('10:00-14:00;17:00-22:00', 720, 800), true);
