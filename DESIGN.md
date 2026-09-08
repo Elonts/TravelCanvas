@@ -1,252 +1,279 @@
 ---
 name: TravelCanvas
-description: 以可信数据校验旅行灵感的中国自由行规划界面
+description: 以真实地点与路线校验旅行灵感的中国自由行规划画布
 colors:
-  tea-mountain-green: "#226054"
-  pine-ink: "#18322e"
-  pottery-orange: "#df7255"
-  warm-sand: "#f6f4ee"
+  tea-green: "#1f6255"
+  deep-tea: "#17483f"
+  terracotta: "#d96e4f"
+  pine-ink: "#17322d"
+  mist-text: "#64746e"
+  warm-sand: "#f4f0e7"
   rice-paper: "#fffdf8"
-  mist-text: "#6b7671"
-  stone-line: "#dedbd1"
-  soft-tea: "#dcebe0"
-  warning-wash: "#fff2eb"
-  warning-ink: "#804031"
-  danger: "#b83f31"
+  stone-line: "#d9d5c9"
+  soft-tea: "#dfeae2"
+  soft-terracotta: "#f7e3d8"
+  map-water: "#d9e9e3"
+  map-land: "#ece8dc"
+  danger: "#a3382a"
 typography:
   display:
-    fontFamily: 'Arial, "Microsoft Yahei", sans-serif'
-    fontSize: "52px"
-    fontWeight: 700
-    lineHeight: 1.08
-    letterSpacing: "-0.07em"
-  display-accent:
-    fontFamily: "Georgia, serif"
-    fontSize: "52px"
-    fontWeight: 700
-    lineHeight: 1.08
-    letterSpacing: "-0.07em"
+    fontFamily: '"Noto Serif SC", Georgia, serif'
+    fontSize: "clamp(43px, 4.45vw, 68px)"
+    fontWeight: 600
+    lineHeight: 1.13
+    letterSpacing: "-0.055em"
   headline:
-    fontFamily: 'Arial, "Microsoft Yahei", sans-serif'
-    fontSize: "24px"
+    fontFamily: '"Noto Sans SC", "Microsoft Yahei", sans-serif'
+    fontSize: "22px"
     fontWeight: 700
+    lineHeight: 1.35
+    letterSpacing: "-0.02em"
   title:
-    fontFamily: 'Arial, "Microsoft Yahei", sans-serif'
-    fontSize: "18px"
+    fontFamily: '"Noto Sans SC", "Microsoft Yahei", sans-serif'
+    fontSize: "16px"
     fontWeight: 700
+    lineHeight: 1.45
   body:
-    fontFamily: 'Arial, "Microsoft Yahei", sans-serif'
+    fontFamily: '"Noto Sans SC", "Microsoft Yahei", sans-serif'
     fontSize: "14px"
     fontWeight: 400
-    lineHeight: 1.7
+    lineHeight: 1.75
   label:
-    fontFamily: 'Arial, "Microsoft Yahei", sans-serif'
-    fontSize: "11px"
+    fontFamily: '"Noto Sans SC", "Microsoft Yahei", sans-serif'
+    fontSize: "12px"
     fontWeight: 700
-    letterSpacing: "0.12em"
+    lineHeight: 1.5
 rounded:
   xs: "3px"
   sm: "7px"
-  md: "10px"
+  md: "9px"
   lg: "13px"
+  canvas: "18px"
   full: "999px"
 spacing:
   xs: "5px"
   sm: "8px"
   md: "13px"
   lg: "18px"
+  panel: "25px"
   xl: "28px"
-  section: "46px"
+  section: "42px"
 components:
   button-primary:
-    backgroundColor: "{colors.tea-mountain-green}"
+    backgroundColor: "{colors.tea-green}"
     textColor: "{colors.rice-paper}"
     typography: "{typography.body}"
     rounded: "{rounded.sm}"
-    padding: "13px 19px"
+    padding: "14px 18px"
   button-secondary:
     backgroundColor: "transparent"
-    textColor: "{colors.tea-mountain-green}"
-    typography: "{typography.body}"
+    textColor: "{colors.tea-green}"
+    typography: "{typography.label}"
     rounded: "{rounded.sm}"
-    padding: "12px 18px"
+    padding: "9px 12px"
   field:
     backgroundColor: "#ffffff"
     textColor: "{colors.pine-ink}"
     typography: "{typography.body}"
     rounded: "{rounded.sm}"
-    padding: "11px"
-  panel:
+    padding: "11px 12px"
+  planning-panel:
     backgroundColor: "{colors.rice-paper}"
     textColor: "{colors.pine-ink}"
     rounded: "{rounded.lg}"
-    padding: "28px"
-  card:
+    padding: "25px"
+  content-card:
     backgroundColor: "{colors.rice-paper}"
     textColor: "{colors.pine-ink}"
     rounded: "{rounded.lg}"
     padding: "18px"
-  chip-selected:
+  selected-chip:
     backgroundColor: "{colors.soft-tea}"
-    textColor: "{colors.tea-mountain-green}"
+    textColor: "{colors.tea-green}"
     rounded: "{rounded.full}"
     padding: "6px 9px"
+  journey-canvas:
+    backgroundColor: "{colors.map-land}"
+    textColor: "{colors.pine-ink}"
+    rounded: "{rounded.canvas}"
 ---
 
 # Design System: TravelCanvas
 
 ## Overview
 
-**Creative North Star: "城市探索罗盘"**
+**Creative North Star: "路线先行的城市探索画布"**
 
-TravelCanvas 的界面像一枚面向城市探索的精确罗盘：方向明确、信息可信、操作路径短，同时保留旅行本身的期待感。它用暖色纸张般的底色承载密集信息，以茶山绿表示可靠行动和已确认状态，再用陶土橙标记步骤、时间与需要注意的线索。
+TravelCanvas 把地图从结果附件提升为贯穿规划过程的工作画布：用户在左侧快速输入必要条件，右侧持续呈现从未查询概览、已核验候选点位到 Provider 支持路线的真实状态。界面像一张正在形成的旅行手稿，既保留暖纸、山水与定位针带来的期待感，也始终明确哪些信息已核验、哪些仍待确认。
 
-整体气质精准、高效、专业。组件采用紧凑而清楚的边界，页面以轻微浮起的层次帮助用户辨认当前操作、悬浮选择器和关键决策区，但不能演变为企业后台或数据仪表盘。内容丰富时依靠分组、折叠和留白保持阅读节奏，而不是堆叠更多颜色或装饰。
+整体气质便捷、高效、可信。暖砂背景与米纸表面承载长流程，茶绿色聚焦执行与核验，陶土色只负责方向、进度和提醒；本地中文衬线标题带来编辑感，本地无衬线正文保持表单、来源和行程信息清楚可扫。系统允许信息丰富，但不演变成企业后台、指标墙或同权重卡片阵列。
 
 **Key Characteristics:**
 
-- 暖砂底色上的纸张型内容表面
-- 茶山绿主行动与陶土橙导航线索
-- 高密度但有清晰阅读顺序的操作界面
-- 轻微浮起、细边框与克制阴影共同建立层次
-- 地点图片、路线和来源状态共同表达可信旅行感
+- 规划左栏与持续路线画布构成不对称主舞台
+- 暖砂、米纸、茶绿和陶土色形成克制的自然旅行语境
+- Noto Serif SC 标题与 Noto Sans SC 任务正文分工清晰
+- 高级条件渐进展开，必要信息与唯一主操作优先
+- 画布诚实经历概览、候选和真实路线三种状态
+- 来源、查询时间、待确认与降级说明是界面的一部分
 
 ## Colors
 
-色彩来自自然旅行语境：茶山绿承担可信与行动，陶土橙承担方向和提醒，暖砂与米纸色提供长页面阅读所需的温度。
+色彩取自茶山、陶土和旅行纸张；低饱和中性色负责承载，茶绿色与陶土色以稀缺方式表达行动和方向。
 
 ### Primary
 
-- **茶山绿** (#226054): 用于主按钮、链接、地图路径、选中状态与已核验信息。它是页面中最稳定的行动信号。
+- **茶绿:** 主按钮、链接、选中状态、已核验状态与真实路线的稳定行动色。
+- **深茶绿:** 主操作悬停、重点说明和需要更高对比度的可信文字。
 
 ### Secondary
 
-- **陶土橙** (#df7255): 用于步骤眉题、时间和提醒边线。它负责引导注意，不与主按钮争夺操作优先级。
+- **陶土色:** 首屏方向提示、状态点、时间和非阻止性提醒；不与主按钮竞争。
+- **柔陶土:** 提醒、移除和轻度风险操作的低强度背景。
 
 ### Neutral
 
-- **松墨色** (#18322e): 承担标题与主要正文，保持比纯黑更温和的阅读体验。
-- **暖砂色** (#f6f4ee): 作为页面底色，将长流程统一在同一旅行画布中。
-- **米纸色** (#fffdf8): 用于面板、卡片和内容容器，形成清楚但不生硬的前景表面。
-- **雾灰字** (#6b7671): 用于说明、来源、查询时间和辅助信息。
-- **石线色** (#dedbd1): 用于输入框、卡片和分隔线的细边界。
-- **浅茶色** (#dcebe0): 用于已选、推荐和餐饮等正向分组背景。
-- **警示暖底** (#fff2eb): 用于待确认、预约和软约束提示的背景。
-- **警示棕** (#804031): 用于待确认、预约和软约束提示的文字。
-- **风险红** (#b83f31): 只用于错误和阻止性风险。
+- **松墨色:** 标题、正文与高优先级信息，比纯黑更适合暖色页面。
+- **雾灰字:** 辅助说明、来源、查询时间和次级元数据。
+- **暖砂:** 页面底色，将长流程统一在同一张旅行画布中。
+- **米纸:** 表单、卡片、地图浮层和粘性操作的前景表面。
+- **石线:** 字段、面板、卡片与分隔线的细边界。
+- **柔茶绿:** 已选、推荐与正向分组的浅背景。
+- **地图水色 / 地图陆色:** 未查询与候选阶段的抽象地图材质；不伪装成真实底图。
+- **风险红:** 只用于错误与阻止性风险。
 
 ### Named Rules
 
-**The Green Means Action Rule.** 茶山绿优先表示可以执行、已经选择或已经核验的状态，不把它稀释成大面积装饰。
+**The Green Means Action Rule.** 茶绿色优先表示可执行、已选择或已核验，不把它稀释成大面积装饰。
 
-**The Orange Guides Rule.** 陶土橙用于指路和提醒；一个视区内只建立少量橙色焦点。
+**The Orange Guides Rule.** 陶土色用于方向、时间和提醒；一个视区只建立少量陶土色焦点。
+
+**The Map Is Honest Rule.** 抽象地图色只表达画布状态；真实道路、路线和地点事实必须来自对应 Provider，或明确标为待确认。
 
 ## Typography
 
-**Display Font:** Arial，回退至 Microsoft Yahei 与系统无衬线字体  
-**Display Accent Font:** Georgia，回退至系统衬线字体  
-**Body Font:** Arial，回退至 Microsoft Yahei 与系统无衬线字体
+**Display Font:** 本地加载的 Noto Serif SC，回退至 Georgia 与系统衬线字体
 
-**Character:** 主体排版直接、紧凑并适合扫描；首屏标题中的局部 Georgia 斜体提供旅行编辑感。衬线字体是有限的情绪强调，不进入表单、数据和操作组件。
+**Body Font:** 本地加载的 Noto Sans SC，回退至 Microsoft Yahei 与系统无衬线字体
+
+**Character:** 中文衬线主标题提供旅行编辑感与记忆点，无衬线正文负责速度、密度和数据可信度。字体文件随应用本地加载，避免把外部字体网络作为首屏依赖。
 
 ### Hierarchy
 
-- **Display** (700, 52px, line-height 1.08): 仅用于首屏主标题；760px 以下收至 40px，520px 以下收至 36px。
-- **Headline** (700, 24px): 用于页面阶段和城市层级标题。
-- **Title** (700, 16–20px): 用于地点、餐厅、地图和卡片标题。
-- **Body** (400, 12–14px, line-height 1.5–1.8): 用于正文和说明；较长内容控制在可扫描的卡片或折叠区域内。
-- **Label** (700, 10–13px, letter-spacing 0.12em): 用于步骤眉题、状态和来源类别。
+- **Display** (600, fluid 43–68px, line-height 1.13): 只用于首屏宣言；窄屏通过流式字号收缩，不进入表单与地图数据。
+- **Headline** (700, 20–22px, line-height 1.35): 用于规划面板、候选阶段与地图模块的一级标题。
+- **Title** (700, 16–20px, line-height 1.45): 用于地点、日程、卡片与弹层标题。
+- **Body** (400, 14–15px, line-height 1.65–1.75): 用于任务正文、表单值与说明；长文本保留足够行距。
+- **Label** (700, 10–12px, line-height 1.5): 用于字段标签、来源、状态和紧凑操作，不依赖全大写或夸张字距制造层级。
 
 ### Named Rules
 
-**The Serif Is a Destination Rule.** Georgia 只出现在能承载旅行情绪的短标题强调中；所有任务操作保持无衬线字体。
+**The Serif Marks the Promise Rule.** Noto Serif SC 只承载首屏旅行承诺；表单、候选、地图、预算、来源与按钮全部使用 Noto Sans SC。
+
+**The Local Type Rule.** 核心中文字体必须随应用本地交付；回退字体只负责故障容错，不定义视觉方向。
 
 ## Layout
 
-页面主体最大宽度为 1160px，桌面端左右留出 26px 内边距，底部为长行程预留 80px。首屏采用约 2:1 的不对称双栏；旅行需求使用三栏表单；结果区采用主行程栏加 300px 信息侧栏；候选地点采用两列卡片网格。
+页面主体最大宽度为 1480px，桌面两侧内边距为 28px。1050px 以上采用不对称的 Route-first Canvas 网格：左侧至少 410px，承载首屏说明、紧凑规划面板和阶段内容；右侧至少 560px，承载更大的粘性路线画布。首屏和后续结果共享同一张画布，而不是在流程末尾额外插入一张地图。
 
-空间密度以 5、8、13、18、28 和 46px 的递进节奏为主。小间距服务于标签和紧密关联的信息，中间距服务于字段、卡片内容及操作组，大间距负责阶段分隔。
+必要表单为两列网格，出发地和目的地跨满两列，日期、天数和人数保持紧凑；预算、交通、偏好、限制与餐饮证据位于渐进披露区。候选卡在桌面规划栏中单列，在 761–1050px 的中等宽度内容区恢复为两列，确保信息密度随可用宽度变化。
 
-760px 以下，首屏和结果主次栏改为单列，表单保留两列，候选卡与每日指南改为单列。520px 以下，表单完全单列，面板内边距从 28px 收至 18px，标题与选择条改为纵向排列；城市选择器变为固定浮层。所有移动布局必须避免横向溢出。
+1050px 以下按“规划—地图—阶段内容”单列排列，地图取消粘性并保持完整可读高度；760px 以下缩小页面与面板内边距、降低画布高度并把结果侧栏改为单列；520px 以下表单和卡片完全单列，城市选择器使用受控的固定浮层。所有断点禁止水平溢出和桌面、地图内部的双重滚动。
 
-**The Journey Before Dashboard Rule.** 页面可以高密度，但必须按照“需求—候选—路线”的旅行任务推进；不使用后台式左侧导航、指标墙或无意义数据卡阵列。
+空间节奏以 5、8、13、18、25、28 和 42px 为主。小间距维持标签、状态与字段关联，中等间距组织面板内容，大间距区分规划阶段；密度靠分组与留白管理，不靠增加容器层级。
+
+**The Canvas Persists Rule.** 需求、候选与行程改变的是画布状态，不改变画布在任务中的主位置。
+
+**The Mobile Story Rule.** 窄屏顺序固定为规划、地图、阶段内容，让用户先行动、再看空间结果、最后处理细节。
 
 ## Elevation & Depth
 
-系统采用轻微浮起的层次。普通面板与卡片依靠米纸色、细边框和暖砂背景分离；阴影集中用于城市选择菜单、地图浮层、选中卡和底部粘性操作条等需要明确覆盖关系的元素。静态内容不普遍堆叠阴影。
+系统默认平整，普通面板和内容卡依靠米纸表面与 1px 石线边界建立层次。阴影只出现在需要明确覆盖关系的路线画布、城市选择菜单、地图详情、粘性选择条、地图定位针和当前选中卡；静态嵌套内容不重复加阴影。
 
 ### Shadow Vocabulary
 
-- **菜单浮层** (`0 18px 45px #18322e2e`): 柔和的大范围深绿透明阴影，用于城市选择等临时覆盖层。
-- **地图信息浮层** (`0 8px 28px #18322e26`): 更轻的环境阴影，与半透明米纸背景及模糊共同使用。
-- **关键操作浮层** (`0 10px 35px #18322e26`): 中等范围阴影，用于底部粘性选择条，说明它悬浮在候选内容之上。
-- **选中描边** (`0 0 0 2px #28584922`): 极浅茶山绿外圈，用于候选卡选中状态，而不是制造真实高度。
+- **路线画布环境影** (`0 22px 55px rgba(23, 50, 45, .14)`): 桌面主画布的唯一大面积环境阴影。
+- **菜单浮层** (`0 18px 45px rgba(23, 50, 45, .18)`): 城市选择等临时覆盖层。
+- **地图详情浮层** (`0 8px 28px rgba(23, 50, 45, .15)`): 真实地图地点详情。
+- **粘性选择条** (`0 10px 35px rgba(23, 50, 45, .15)`): 候选阶段的底部提交操作。
+- **地图定位针** (`0 4px 12px rgba(23, 50, 45, .33)`): 编号定位针从底图中分离。
+- **选中描边** (`0 0 0 2px rgba(40, 88, 73, .13)`): 候选卡当前选择状态，不制造额外高度。
 
 ### Named Rules
 
-**The Lift Has a Job Rule.** 只有浮层、粘性操作或当前选中项可以获得阴影；阴影必须解释交互层级。
+**The Lift Has a Job Rule.** 阴影必须解释覆盖、粘性、定位或当前选择；没有交互层级就保持平整。
 
 ## Shapes
 
-主要表面使用柔和但克制的圆角。按钮和输入框使用较小的 7px 圆角，嵌套内容使用 8–10px，中大型卡片和地图使用 11–13px。状态标签使用 3–5px 小圆角，编号、点位和选择标记使用圆形。边框通常为 1px；待确认候选可使用虚线边框，时间线使用 2px 竖线，警告使用 2–3px 左侧强调线。
+控件采用紧凑的 7px 圆角，字段组与小浮层使用 9px，普通内容表面使用 13px，路线画布使用 18px；胶囊状态只用于短状态与城市选择。边框通常为 1px，时间线可使用单条细线，待确认内容可使用虚线，但不以厚描边制造装饰。
 
-地图编号 Marker 是系统最具识别度的轮廓：圆形主体带单个尖角并旋转成定位针形状。其他组件不复制这一造型，避免削弱地图语义。
+圆形定位针带一个朝向尖角，是系统最具识别度的轮廓。候选阶段的点位可以复用该语言，但未生成真实路线前不得用连接线暗示道路可行性。其他按钮和卡片不复制定位针轮廓。
 
 ## Components
 
 ### Buttons
 
-- **Shape:** 紧凑的轻圆角矩形（7px）。
-- **Primary:** 茶山绿底、米纸白字，常规内边距为 13px × 19px，字体为 14px 粗体。
-- **Hover / Focus:** 保持颜色角色稳定；键盘焦点使用 3px 陶土橙轮廓和 3px 偏移。
-- **Secondary:** 透明背景、茶山绿文字和浅茶灰边框；不会与主操作争夺视觉重量。
-- **Disabled:** 保留形状和文字，整体透明度降至 65%。
+- **Shape:** 紧凑轻圆角矩形（7px）。
+- **Primary:** 茶绿底、米纸白字，表单末尾横向铺满；每个阶段只保留一个最高权重操作。
+- **Hover / Focus:** 悬停进入深茶绿；键盘焦点使用清晰的半透明茶绿外圈，不通过位移制造抖动。
+- **Secondary:** 透明或柔茶绿背景、茶绿文字与细边框，用于添加、替换、核验和局部调整。
+- **Disabled:** 保留标签与形状，降低透明度并改变光标；加载文案说明当前动作。
 
 ### Chips
 
-- **Style:** 浅茶色底、茶山绿文字，内容紧凑；标签类状态使用更小的圆角，已选城市使用接近胶囊的外形。
-- **State:** 已选项可带实心茶山绿圆形序号；未选过滤项保持透明背景和细边框。
+- **Style:** 柔茶绿底、茶绿文字的紧凑胶囊；选中城市内含实心圆形序号。
+- **State:** 选中、顺序和可移除性同时可见；未选筛选项使用透明表面与细边框。
 
 ### Cards / Containers
 
-- **Corner Style:** 中大型表面使用 11–13px 圆角，内部卡片使用 8–10px。
-- **Background:** 主表面使用米纸色；推荐、餐饮和编辑区域使用浅茶色或更浅的灰绿色分组。
-- **Shadow Strategy:** 默认依赖细边框；只有选中、覆盖和粘性状态使用阴影。
-- **Border:** 1px 石线色或浅茶灰；待确认状态可以使用虚线。
-- **Internal Padding:** 卡片常用 18px，大面板使用 28px，移动端大面板收至 18px。
+- **Corner Style:** 普通面板与卡片使用 13px 圆角，内部编辑与证据区使用 7–9px。
+- **Background:** 米纸为主要表面；柔茶绿与更浅的灰绿色只用于语义分组。
+- **Shadow Strategy:** 默认使用边框；阴影遵循 Elevation & Depth 的覆盖关系。
+- **Border:** 1px 石线或浅茶灰；待确认与手动补充区可使用虚线。
+- **Internal Padding:** 规划面板为 25px，普通卡片约 18px；760px 以下主要面板收至 19px。
 
 ### Inputs / Fields
 
-- **Style:** 白色背景、1px 石线边框、7px 圆角与 11px 内边距；标签位于字段上方并使用 13px 粗体。
-- **Focus:** 必须提供与链接、按钮同等清晰的键盘焦点表现；交互状态不能只依赖颜色。
-- **Error / Disabled:** 错误使用风险红文本；禁用状态降低透明度但仍保留可读性。
+- **Style:** 白色背景、1px 石线边框、7px 圆角与 11px × 12px 内边距；标签置于字段上方。
+- **Focus:** 输入、按钮、链接和可展开摘要都必须提供同等级的可见键盘焦点；焦点状态不只依赖颜色。
+- **Error / Disabled:** 错误使用风险红并保留可读文字；禁用和加载状态不得移除字段含义。
+
+### Planning Panel
+
+规划面板优先呈现出发地、目的地、日期、天数和人数，唯一主操作始终位于必要条件之后。预算、交通、偏好、限制、餐饮要求与公开笔记证据通过原生可展开区域渐进披露；折叠不能隐藏校验错误或阻止性反馈。
+
+### Journey Canvas
+
+路线画布是贯穿首页的签名组件。未查询时使用抽象水陆与道路纹理，并明确“不代表真实路线”；发现完成后按真实坐标显示已核验候选点，但不连接路线；生成方案后切换到 Provider 底图、编号路线、地点详情与来源时间。加载、空数据和 Provider 失败都在同一画布中给出可理解的状态或顺序降级。
 
 ### Candidate Card
 
-候选卡采用图片与内容并排的双区结构，桌面端图片宽 150px、内容自适应；520px 以下转为上下结构。加入行程操作悬浮在右上角，选中后使用茶山绿边框和浅色外圈。地点名称、地址、推荐原因、约束标签和来源按主次顺序排列，详细证据通过折叠区域展开。
-
-### Route Map
-
-地图卡片将按天筛选、真实底图、编号点位、地点详情浮层、地点顺序按钮和来源说明组合为一个完整模块。地图点位以茶山绿定位针为主，当前地点通过按钮状态和浮层共同确认；没有真实底图时必须保留明确降级说明。
+候选卡按图片、名称、地址、推荐原因、约束标签与来源证据排序信息。宽屏规划栏采用约 122px 图片加内容的横向结构，中等宽度可两列，520px 以下转为上下结构。选中状态同时使用边框、轻外圈和明确操作文案，不只使用颜色。
 
 ### Notices
 
-待确认与软约束提示使用警示暖底、警示棕文本和陶土橙左边线。错误使用风险红。普通来源和查询时间保持雾灰色，不与风险信息使用相同视觉重量。
+待确认、预约和软约束使用暖陶土提示面与深色文字；错误使用风险红。普通来源与查询时间保持雾灰，不与风险信息使用同一视觉重量。
+
+### Motion & Accessibility
+
+状态、边框和点位变化使用约 150ms 的短过渡；候选点进入约 280ms，按 55ms 错开；加载旋转只表达正在查询。动画不承载唯一信息，`prefers-reduced-motion` 下将动画和过渡压缩至近乎即时并关闭平滑滚动。正文与交互保持足够对比度，触控目标、焦点顺序、语义标签、`aria-busy` 和状态文本共同支持键盘与辅助技术。
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** 让每个页面阶段都有明确标题、当前任务和唯一主操作。
-- **Do** 使用茶山绿表达执行、选择和核验，使用陶土橙表达顺序与注意事项。
-- **Do** 用折叠、分组和响应式重排管理复杂信息，保持高效扫描。
-- **Do** 将地点图片、Provider 来源、查询时间和待确认状态作为旅行可信度的一部分。
-- **Do** 只在悬浮、粘性和选中状态使用轻微阴影。
+- **Do** 让用户先填写最少必要条件，并把唯一主操作紧邻这些条件。
+- **Do** 保持右侧画布在需求、候选和行程阶段持续存在，并诚实切换状态。
+- **Do** 使用茶绿表达执行、选择和核验，使用陶土色表达方向、时间与提醒。
+- **Do** 通过折叠、分组和响应式重排管理复杂条件，保持快速扫描。
+- **Do** 将 Provider、查询时间、待确认和降级说明作为地图与地点内容的一部分。
+- **Do** 为键盘焦点、加载、空数据、错误和减少动态效果提供等价体验。
 
 ### Don't:
 
-- **Don't** 把界面改造成企业后台、指标看板或由大量同权重数据卡组成的仪表盘。
-- **Don't** 使用大面积茶山绿装饰，导致主操作和已核验状态失去辨识度。
-- **Don't** 把陶土橙同时用于多个竞争性操作；它首先是方向和提醒色。
-- **Don't** 在表单、地图数据、预算和来源信息中使用衬线字体。
-- **Don't** 用阴影替代信息层级，或给每一层嵌套卡片继续增加高度。
+- **Don't** 在真实 Provider 数据到达前绘制连接候选点的路线或暗示道路可行性。
+- **Don't** 把首页改造成企业后台、指标墙或同权重卡片阵列。
+- **Don't** 让高级条件阻塞首次发现，也不要静默隐藏它们产生的校验问题。
+- **Don't** 把茶绿用作大面积装饰，或让陶土色与主操作竞争。
+- **Don't** 在表单、地图数据、预算、来源和操作组件中使用衬线字体。
+- **Don't** 给每一层嵌套卡片加阴影，或用动态效果替代状态文字。

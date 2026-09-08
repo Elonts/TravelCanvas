@@ -4,7 +4,7 @@ import { FormEvent, Fragment, useEffect, useState } from 'react';
 import type { Plan } from '../lib/plan';
 import { FoodSummary, MealCard, SourceTip, type MealAction } from './food-view';
 import { CityMultiSelect } from './city-multi-select';
-import { RouteMap } from './route-map';
+import { JourneyCanvas } from './journey-canvas';
 import { CandidatePicker } from './candidate-picker';
 import type { DiscoveryResult } from '../lib/discovery-types';
 import { userFacingRequestError } from '../lib/client-errors.mjs';
@@ -78,39 +78,63 @@ export default function Home() {
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
     } catch (e) { setChangeError(userFacingRequestError(e, '当天路线重新规划失败')); } finally { setChanging(false); }
   };
-  return <main>
-    <header><div className="brand">TRAVELCANVAS <span>中国旅行规划</span></div><p>路线以数据校验，灵感由 AI 生成</p></header>
-    <section className="hero"><div><span className="eyebrow">可信旅行方案 · BETA</span><h1>让每一步，<em>更值得抵达。</em></h1><p>沿着想去的路线，找到合口味、少绕路的具体餐厅。把预算、用餐时间与有来源的攻略一起安排好。</p></div><aside><b>行程里，也有值得期待的一餐</b><span>✓ 具体分店与真实路线查询</span><span>✓ 全员餐饮预算与绕路约束</span><span>✓ 小红书公开笔记与来源 Tips</span><span>✓ 换店重算与餐厅锁定</span></aside></section>
-    <section className="panel"><div className="section-head"><div><span className="eyebrow">01 / 旅行需求</span><h2>开始规划</h2></div><small>方案暂存 30 分钟，用于换店调整</small></div>
-      <form onSubmit={submit}><div className="grid">
-        <label>出发地<input required name="origin" placeholder="如：上海市静安区" defaultValue="上海" maxLength={60} /><small>可填写城市、车站或具体地址</small></label>
-        <div className="destination-field"><span className="field-label">目的地（可多选）</span><CityMultiSelect value={destinations} onChange={setDestinations} /></div>
-        <label>出发日期<input required type="date" name="startDate" defaultValue={today} /></label>
-        <label>旅行天数<input required type="number" name="days" min="1" max="10" defaultValue="2" /></label>
-        <label>旅行预算（元）<input required type="number" name="budget" min="500" max="1000000" defaultValue="4000" /></label>
-        <label>预算口径<select name="budgetBasis"><option value="group">全员总预算</option><option value="person">人均总预算</option></select></label>
-        <label>出行人数<input required type="number" name="travelers" min="1" max="8" defaultValue="2" /></label>
-        <label>主要交通<select name="transport"><option value="walk">步行优先</option><option value="transit">公共交通</option><option value="drive">驾车/打车</option></select></label>
+  return <main className="app-shell">
+    <header className="app-header"><div className="brand">TRAVELCANVAS <span>中国旅行规划</span></div><p>真实地点 · 路线可验证</p></header>
+    <section className={`experience-grid ${plan ? 'has-plan' : discovery ? 'has-discovery' : 'is-idle'}`}>
+      <div className="launch-content">
+        <section className="hero">
+          <h1>从想去，<em>到走得通。</em></h1>
+          <p>先用一分钟定下基本行程。我们再帮你发现真实地点、核验路线，把想去的地方安排得更顺。</p>
+          <div className="trust-line" aria-label="规划数据说明"><span>地点逐一核验</span><span>路线来自地图服务</span><span>风险明确标注</span></div>
+        </section>
+        <section className="panel planner-panel">
+          <div className="section-head"><div><h2>先定下基本行程</h2><p>填完这些，就可以开始发现地点。</p></div><small>方案暂存 30 分钟，可继续换店调整</small></div>
+          <form className="planner-form" onSubmit={submit}>
+            <div className="quick-grid">
+              <label>出发地<input required name="origin" placeholder="城市、车站或具体地址" defaultValue="上海" maxLength={60} /></label>
+              <div className="destination-field"><span className="field-label">目的地（可多选）</span><CityMultiSelect value={destinations} onChange={setDestinations} /></div>
+              <label>出发日期<input required type="date" name="startDate" defaultValue={today} /></label>
+              <label>旅行天数<input required type="number" name="days" min="1" max="10" defaultValue="2" /></label>
+              <label>出行人数<input required type="number" name="travelers" min="1" max="8" defaultValue="2" /></label>
+            </div>
+            <details className="advanced-planning">
+              <summary><span>补充预算、偏好与餐饮要求</span><small>可选，但能让候选更贴合这趟旅行</small></summary>
+              <div className="advanced-content">
+                <div className="grid compact-grid">
+                  <label>旅行预算（元）<input required type="number" name="budget" min="500" max="1000000" defaultValue="4000" /></label>
+                  <label>预算口径<select name="budgetBasis"><option value="group">全员总预算</option><option value="person">人均总预算</option></select></label>
+                  <label>主要交通<select name="transport"><option value="walk">步行优先</option><option value="transit">公共交通</option><option value="drive">驾车/打车</option></select></label>
+                </div>
+                <div className="grid preference-grid">
+                  <label>旅行偏好<textarea name="preferences" placeholder="如：西湖、茶文化、慢节奏" maxLength={300} /></label>
+                  <label>旅行限制<textarea name="constraints" placeholder="如：避免高强度徒步、不安排夜间行程" maxLength={300} /></label>
+                </div>
+                <fieldset><legend>把美食安排进路线</legend><div className="grid compact-grid">
+                  <label>餐饮偏好<input name="foodPreferences" placeholder="如：杭帮菜、面食、清淡" maxLength={300} /></label>
+                  <label>饮食禁忌 / 过敏<input name="dietary" placeholder="如：不吃牛肉、花生过敏" maxLength={200} /></label>
+                  <label>推荐模式<select name="foodMode"><option value="route">顺路优先</option><option value="food">美食优先（仍遵守绕路上限）</option></select></label>
+                  <label>最多额外交通（分钟）<input type="number" required name="maxDetour" min="0" max="90" defaultValue="20" /></label>
+                  <label>每餐用餐时长（分钟）<input type="number" required name="mealMinutes" min="30" max="120" defaultValue="60" /></label>
+                  <label>排队预留（分钟）<input type="number" required name="queueMinutes" min="0" max="120" defaultValue="20" /></label>
+                </div><p className="form-help">午餐与晚餐分别占正餐分配的 40% / 60%，另留餐饮预算的 20% 给早餐和零食。存在饮食禁忌时，门店需确认适配后再决定，不自动视为安全。</p></fieldset>
+                <details className="note-input"><summary>补充小红书帖子（可选）</summary><p className="form-help">自动查询仅覆盖公开收录的笔记。可粘贴正文补充线索；只提供链接不能自动读取全文。帖子经验和榜单线索都会标为待确认。</p>
+                  <label>帖子正文<textarea name="noteText" maxLength={12000} rows={5} placeholder="粘贴包含具体分店名、点单或旅游经验的正文…" /></label>
+                  <div className="grid preference-grid"><label>原文 / 分享链接<input name="noteUrl" type="url" placeholder="https://www.xiaohongshu.com/explore/…" maxLength={2000} /></label><label>帖子发布日期（知道时填写）<input name="noteDate" type="date" /></label></div>
+                </details>
+              </div>
+            </details>
+            <button className="primary-action" disabled={loading || changing}>{loading && !discovery ? '正在核验地点与来源…' : '开始发现地点'}</button>
+            <p className="planner-meta">AI 负责发现灵感；地点、路线、来源与查询时间会单独标注。</p>
+          </form>
+          {error && <p className="error" role="alert">{error}</p>}
+        </section>
       </div>
-      <label>旅行偏好<textarea name="preferences" placeholder="如：西湖、茶文化、慢节奏" maxLength={300} /></label>
-      <label>旅行限制<textarea name="constraints" placeholder="如：避免高强度徒步、不安排夜间行程" maxLength={300} /></label>
-      <fieldset><legend>把美食安排进路线</legend><div className="grid">
-        <label>餐饮偏好<input name="foodPreferences" placeholder="如：杭帮菜、面食、清淡" maxLength={300} /></label>
-        <label>饮食禁忌 / 过敏<input name="dietary" placeholder="如：不吃牛肉、花生过敏" maxLength={200} /></label>
-        <label>推荐模式<select name="foodMode"><option value="route">顺路优先</option><option value="food">美食优先（仍遵守绕路上限）</option></select></label>
-        <label>最多额外交通（分钟）<input type="number" required name="maxDetour" min="0" max="90" defaultValue="20" /></label>
-        <label>每餐用餐时长（分钟）<input type="number" required name="mealMinutes" min="30" max="120" defaultValue="60" /></label>
-        <label>排队预留（分钟）<input type="number" required name="queueMinutes" min="0" max="120" defaultValue="20" /></label>
-      </div><p className="form-help">午餐与晚餐分别占正餐分配的 40% / 60%，另留餐饮预算的 20% 给早餐和零食。存在饮食禁忌时，门店需确认适配后再决定，不自动视为安全。</p></fieldset>
-      <details className="note-input"><summary>补充小红书帖子（可选）</summary><p className="form-help">自动查询仅覆盖公开收录的笔记。可粘贴正文补充线索；只提供链接不能自动读取全文。帖子经验和榜单线索都会标为待确认。</p>
-        <label>帖子正文<textarea name="noteText" maxLength={12000} rows={5} placeholder="粘贴包含具体分店名、点单或旅游经验的正文…" /></label>
-        <div className="grid"><label>原文 / 分享链接<input name="noteUrl" type="url" placeholder="https://www.xiaohongshu.com/explore/…" maxLength={2000} /></label><label>帖子发布日期（知道时填写）<input name="noteDate" type="date" /></label></div>
-      </details>
-      <button disabled={loading || changing}>{loading && !discovery ? '正在查询地点、图片与公开笔记…' : '发现景区与美食候选 →'}</button></form>
-      {error && <p className="error" role="alert">{error}</p>}
+      <aside className="experience-map"><JourneyCanvas destinations={destinations} discovery={discovery} selectedIds={selectedIds} plan={plan} loading={loading} /></aside>
+      {(discovery || plan) && <div className="stage-content">
+        {discovery && <CandidatePicker discovery={discovery} selectedIds={selectedIds} busy={loading} error={plan ? '' : error} onToggle={toggleCandidate} onGenerate={generatePlan} onAddCustom={addCustomCandidates} />}
+        {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} onSearchEntertainment={searchEntertainment} onReplanDay={replanDay} changeError={changeError} />}
+      </div>}
     </section>
-    {discovery && <CandidatePicker discovery={discovery} selectedIds={selectedIds} busy={loading} error={plan ? '' : error} onToggle={toggleCandidate} onGenerate={generatePlan} onAddCustom={addCustomCandidates} />}
-    {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} onSearchEntertainment={searchEntertainment} onReplanDay={replanDay} changeError={changeError} />}
   </main>;
 }
 
@@ -151,7 +175,6 @@ function PlanView({ plan, busy, onAction, onSearchEntertainment, onReplanDay, ch
     <div className="notice">当前数据状态：AI {sourceName(plan.sources.ai)} · 景点地图 {sourceName(plan.sources.map)} · 天气 {sourceName(plan.sources.weather)} · 酒店 {sourceName(plan.sources.hotel)} · 小红书公开检索 {sourceName(plan.food.searchState)}。演示数据不代表实时地点或价格。</div>
     {!!plan.food.warnings.length && <div className="notice">{plan.food.warnings.map(warning => <p key={warning}>{warning}</p>)}</div>}
     {changeError && <p className="error change-error" role="alert">{changeError}</p>}
-    <RouteMap route={plan.route} />
     <div className="day-tabs" role="tablist" aria-label="按天查看行程">{plan.days.map((day, index) => <button type="button" role="tab" aria-selected={activeDay === index} className={activeDay === index ? 'active' : 'secondary'} key={day.date} onClick={() => setActiveDay(index)}>第 {index + 1} 天 · {day.city}</button>)}</div>
     {guide && <div className="day-guide"><div><span className="eyebrow">当天气象 · {sourceName(guide.weather.state)}</span><h4>{guide.weather.summary}</h4>{guide.weather.state === 'live' && <p>{guide.weather.low}°—{guide.weather.high}° · 降水 {guide.weather.rain}%</p>}<small>Open-Meteo · {new Date(guide.weather.updatedAt).toLocaleString('zh-CN')}</small></div><div className="day-hotels"><span className="eyebrow">当天住宿建议</span>{guide.hotels.slice(0, 2).map(hotel => <div key={hotel.id}><h4>{hotel.area}</h4><p>{hotel.rationale}</p><a href={hotel.ctripUrl} target="_blank" rel="noreferrer">去携程查看酒店 →</a></div>)}<small>实时房价、库存与取消规则以携程页面为准</small></div><div><span className="eyebrow">当天出行提醒</span><ul>{guide.reminders.map(item => <li key={item}>{item}</li>)}</ul></div></div>}
     <div className="layout"><div>{plan.days.map((day, dayIndex) => activeDay === dayIndex && <article className="day" key={day.date}>

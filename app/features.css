@@ -143,3 +143,30 @@
   .selection-bar { align-items: stretch; flex-direction: column; }
   .custom-place-input > div { align-items: stretch; flex-direction: column; }
 }
+
+/* Route-first homepage: the planning rail stays compact while the canvas carries the visual weight. */
+.section-head p { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.destination-field { grid-column: 1 / -1; }
+.candidate-grid { grid-template-columns: 1fr; }
+.candidate-card { grid-template-columns: 122px minmax(0, 1fr); }
+.candidate-image { min-height: 214px; }
+.candidate-content { padding: 14px; }
+.candidate-content h4 { font-size: 16px; }
+.candidate-city:first-of-type { padding-top: 8px; }
+.candidate-city > h3 { font-size: 20px; }
+.journey-live .route-map { margin: 0; }
+.journey-live .map-title { align-items: flex-start; }
+
+@media (min-width: 1051px) {
+  .stage-content .selection-bar { bottom: 18px; }
+}
+
+@media (max-width: 1050px) and (min-width: 761px) {
+  .candidate-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .candidate-card { grid-template-columns: 135px minmax(0, 1fr); }
+}
+
+@media (max-width: 520px) {
+  .candidate-card { grid-template-columns: 1fr; }
+  .candidate-image { min-height: 190px; }
+}

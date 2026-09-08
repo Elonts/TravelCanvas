@@ -15,16 +15,22 @@ try {
     const entertainmentRequests = []; page.on('request', request => { if (request.url().includes('/api/plan/entertainment')) entertainmentRequests.push(request.postDataJSON()); });
     try {
       await page.goto(server.base);
+      assert.equal(await page.getByRole('heading', { name: '从想去，到走得通。' }).count(), 1);
+      assert.equal(await page.locator('.journey-preview[data-state="idle"]').count(), 1);
+      assert.ok((await page.locator('.journey-preview-foot').innerText()).includes('不代表真实路线'));
       await page.getByLabel('选择一个或多个目的地城市').click();
       await page.getByLabel('搜索省份或城市').fill('浙江');
       assert.equal(await page.getByText('浙江省', { exact: true }).count(), 1);
       assert.equal(await page.getByLabel('杭州').isChecked(), true);
       await page.getByLabel('选择一个或多个目的地城市').click();
       await page.getByLabel('旅行天数').fill('1');
+      await page.locator('.advanced-planning > summary').click();
       await page.getByLabel('旅行预算（元）').fill('6000');
       await page.getByLabel('餐饮偏好').fill('杭帮菜');
-      await page.getByRole('button', { name: /发现景区与美食候选/ }).click();
+      await page.getByRole('button', { name: /开始发现地点/ }).click();
       await page.locator('.candidate-panel').waitFor({ timeout: 60000 });
+      assert.equal(await page.locator('.journey-preview[data-state="discovery"]').count(), 1);
+      assert.ok((await page.locator('.journey-preview-foot').innerText()).includes('候选阶段不连接为道路路线'));
 
       if (mode === 'offline') {
         assert.equal(await page.locator('.candidate-card').count(), 0);
@@ -46,6 +52,7 @@ try {
         assert.ok(await page.getByText(/小红书公开笔记证据/).count() > 0);
         await page.getByRole('button', { name: /用已选地点生成路线/ }).click();
         await page.locator('.result').waitFor({ timeout: 60000 });
+        assert.equal(await page.locator('.journey-live[data-state="plan"]').count(), 1);
         await page.locator('.route-map').waitFor();
         assert.ok(await page.locator('.map-point-list button').count() >= 3);
         assert.equal(await page.getByLabel('高德交互式行程路线图').count(), 1);
