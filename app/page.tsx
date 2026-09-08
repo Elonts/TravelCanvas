@@ -8,6 +8,7 @@ import { RouteMap } from './route-map';
 import { CandidatePicker } from './candidate-picker';
 import type { DiscoveryResult } from '../lib/discovery-types';
 import { userFacingRequestError } from '../lib/client-errors.mjs';
+import { ENTERTAINMENT_TYPES } from '../lib/entertainment';
 
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const sourceName = (state: string) => state === 'live' ? '已查询' : state === 'demo' ? '演示数据' : '待确认';
@@ -21,14 +22,12 @@ export default function Home() {
   const [error, setError] = useState('');
   const [changeError, setChangeError] = useState('');
   const [destinations, setDestinations] = useState<string[]>(['杭州']);
-  const [entertainment, setEntertainment] = useState<string[]>(['台球', '足浴', '剧本杀', '酒馆']);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setLoading(true); setError(''); setChangeError('');
     try {
       if (!destinations.length) throw Error('请至少选择一个目的地城市');
       const body: Record<string, FormDataEntryValue | string[]> = Object.fromEntries(new FormData(event.currentTarget));
       body.destinations = destinations;
-      body.entertainmentPreferences = entertainment.join('、');
       const response = await fetch('/api/discover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await response.json(); if (!response.ok) throw Error(json.error);
       setDiscovery(json); setSelectedIds([]); setPlan(null);
@@ -94,7 +93,6 @@ export default function Home() {
       </div>
       <label>旅行偏好<textarea name="preferences" placeholder="如：西湖、茶文化、慢节奏" maxLength={300} /></label>
       <label>旅行限制<textarea name="constraints" placeholder="如：避免高强度徒步、不安排夜间行程" maxLength={300} /></label>
-      <fieldset><legend>想看的娱乐项目（可多选）</legend><div className="preference-checks">{['台球', '足浴', '剧本杀', '酒馆', '演出', '亲子乐园', '茶馆', '夜游'].map(item => <label key={item}><input type="checkbox" checked={entertainment.includes(item)} onChange={() => setEntertainment(current => current.includes(item) ? current.filter(value => value !== item) : [...current, item])} />{item}</label>)}</div><p className="form-help">这里先选择类型。选完景区和饭店并生成基础路线后，系统才会在当天线路附近查找少绕路的具体娱乐地点并加入行程。</p></fieldset>
       <fieldset><legend>把美食安排进路线</legend><div className="grid">
         <label>餐饮偏好<input name="foodPreferences" placeholder="如：杭帮菜、面食、清淡" maxLength={300} /></label>
         <label>饮食禁忌 / 过敏<input name="dietary" placeholder="如：不吃牛肉、花生过敏" maxLength={200} /></label>
@@ -131,11 +129,10 @@ function PlanView({ plan, busy, onAction, onSearchEntertainment, onReplanDay, ch
   const generalTips = plan.food.tips.filter(tip => !attachedNames.has(tip.placeName) && !plan.food.meals.some(meal => meal.options.some(o => o.restaurant.name === tip.placeName)));
   const guide = plan.dayGuides[activeDay];
   const entertainment = plan.entertainmentDays[activeDay];
-  const entertainmentPreferences = [...new Set(plan.request.entertainmentPreferences.split(/[，,、;；\s]+/).filter(Boolean))];
-  const entertainmentType = entertainmentTypes[activeDay] || entertainmentPreferences[0] || '其他';
+  const entertainmentType = entertainmentTypes[activeDay] || ENTERTAINMENT_TYPES[0];
   const entertainmentQuery = entertainmentQueries[activeDay] || '';
   const entertainmentSelection = entertainmentIds[activeDay] ?? entertainment?.selectedIds ?? [];
-  const entertainmentOptions = entertainment?.options.filter(option => option.preference === entertainmentType) || [];
+  const entertainmentOptions = entertainment?.options.filter(option => entertainmentType === '其他' ? option.preference.startsWith('其他：') : option.preference === entertainmentType) || [];
   const venueChoice = venueChoices[activeDay] || '';
   const replacements = plan.days[activeDay]?.stops.filter(stop => stop.kind !== 'entertainment' && replacementNames[stop.id]?.trim()).map(stop => ({ stopId: stop.id, name: replacementNames[stop.id].trim() })) || [];
   const dayDirty = replacements.length > 0 || entertainmentSelection.join('|') !== (entertainment?.selectedIds || []).join('|');
@@ -168,7 +165,7 @@ function PlanView({ plan, busy, onAction, onSearchEntertainment, onReplanDay, ch
         {plan.food.meals.filter(meal => meal.slot.dayIndex === dayIndex && meal.slot.previous.id === stop.id).map(meal => <MealCard key={meal.slot.id} meal={meal} food={plan.food} busy={busy} onAction={onAction} />)}
       </Fragment>)}
       <div className="day-editor"><span className="eyebrow">顺路娱乐活动</span><p>先选择想玩的类型，再按当天景区和餐饮路线查找具体地点。默认安排 1 个，也可继续添加，最多 3 个。</p>
-        <div className="entertainment-search"><label>娱乐项目<select aria-label="娱乐项目" value={entertainmentType} onChange={event => setEntertainmentTypes(current => ({ ...current, [activeDay]: event.target.value }))}>{entertainmentPreferences.map(item => <option key={item}>{item}</option>)}<option value="其他">其他</option></select></label><label>补充地点或区域（可选）<input value={entertainmentQuery} onChange={event => setEntertainmentQueries(current => ({ ...current, [activeDay]: event.target.value }))} maxLength={100} placeholder="如：西湖附近、某家酒馆" /></label><button className="secondary" type="button" disabled={busy || (entertainmentType === '其他' && entertainmentQuery.trim().length < 2)} onClick={() => onSearchEntertainment(activeDay, entertainmentType, entertainmentQuery.trim(), entertainmentSelection)}>{busy ? '正在查询…' : '按当天路线查找地点'}</button></div>
+        <div className="entertainment-search"><label>娱乐项目<select aria-label="娱乐项目" value={entertainmentType} onChange={event => { setEntertainmentTypes(current => ({ ...current, [activeDay]: event.target.value })); setEntertainmentQueries(current => ({ ...current, [activeDay]: '' })); setVenueChoices(current => ({ ...current, [activeDay]: '' })); }}>{ENTERTAINMENT_TYPES.map(item => <option key={item}>{item}</option>)}<option value="其他">其他</option></select></label><label>{entertainmentType === '其他' ? '具体活动类型（必填）' : '希望在哪个区域或哪家店（可选）'}<input aria-label={entertainmentType === '其他' ? '具体活动类型（必填）' : '希望在哪个区域或哪家店（可选）'} value={entertainmentQuery} onChange={event => setEntertainmentQueries(current => ({ ...current, [activeDay]: event.target.value }))} maxLength={100} placeholder={entertainmentType === '其他' ? '如：密室逃脱、Livehouse、电玩城' : '如：西湖附近、某家酒馆'} /></label><button className="secondary" type="button" disabled={busy || (entertainmentType === '其他' && entertainmentQuery.trim().length < 2)} onClick={() => onSearchEntertainment(activeDay, entertainmentType, entertainmentQuery.trim(), entertainmentSelection)}>{busy ? '正在查询…' : '按当天路线查找地点'}</button></div>
         {!!entertainmentOptions.length && <div className="entertainment-add"><label>推荐的具体地点<select aria-label="推荐的具体地点" value={venueChoice} onChange={event => setVenueChoices(current => ({ ...current, [activeDay]: event.target.value }))}><option value="">请选择地点</option>{entertainmentOptions.map(option => <option key={option.id} value={option.id}>{option.name} · 从 {entertainment.anchorName} 约 {option.routeMinutes ?? '待确认'} 分钟</option>)}</select></label><button className="secondary" type="button" disabled={!venueChoice || entertainmentSelection.length >= 3} onClick={addEntertainment}>添加到当天草稿</button></div>}
         {!!selectedEntertainment.length && <div className="entertainment-draft"><b>当天娱乐草稿</b>{selectedEntertainment.map(option => option && <div key={option.id}><span>{option.preference} · {option.name} · 约 {option.routeMinutes ?? '待确认'} 分钟</span><button type="button" className="text-button" onClick={() => setEntertainmentIds(current => ({ ...current, [activeDay]: entertainmentSelection.filter(id => id !== option.id) }))}>删除</button></div>)}</div>}
         {entertainment?.warning && <p>{entertainment.warning}</p>}<button type="button" disabled={busy || !dayDirty} onClick={() => onReplanDay(activeDay, replacements, entertainmentSelection)}>{busy ? '正在核验地点并重新规划…' : '保存修改并重新规划当天路线'}</button><small>景点替换和娱乐更改会在点击此按钮后一次生效；检索本身不会立即改变路线。</small></div>

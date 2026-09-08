@@ -8,6 +8,7 @@ import { recommendHotels } from './hotels.mjs';
 import type { FoodPlan, Restaurant } from './food-types';
 import { verifyDayReservations } from './reservations.mjs';
 import { amapImageAttribution, fillMissingWebImages } from './web-images.mjs';
+import { ENTERTAINMENT_TYPES } from './entertainment';
 
 const normalize = (value: string) => value.replace(/[\s（）()·]/g, '').toLowerCase();
 const rebuildFoodPlan = buildFoodPlan as unknown as (request: Plan['request'], days: Plan['days'], budget: Plan['budget'], env: NodeJS.ProcessEnv, fetcher: typeof fetch, options: { mapIntervalMs: number; preferredRestaurants: Restaurant[]; discoverySources: FoodPlan['sources'] }) => Promise<FoodPlan>;
@@ -85,26 +86,28 @@ export async function searchEntertainment(plan: Plan, input: { dayIndex: number;
   if (!process.env.AMAP_API_KEY) throw Error('高德服务未配置，无法查询娱乐地点');
   const anchor = day.stops.filter(stop => stop.kind !== 'entertainment').at(-1);
   if (!anchor?.verified) throw Error('当天路线缺少已核验坐标，无法筛选顺路地点');
-  const allowed = plan.request.entertainmentPreferences.split(/[，,、;；\s]+/).filter(Boolean);
-  if (!allowed.includes(input.preference) && input.preference !== '其他') throw Error('请选择本次行程勾选的娱乐类型');
+  if (!(ENTERTAINMENT_TYPES as readonly string[]).includes(input.preference) && input.preference !== '其他') throw Error('请选择有效的娱乐类型');
   if (input.preference === '其他' && input.query.length < 2) throw Error('选择“其他”时，请输入想找的娱乐项目');
   const currentEntertainment = plan.entertainmentDays[input.dayIndex];
   if (input.selectedIds.some(id => !currentEntertainment.options.some(option => option.id === id))) throw Error('娱乐草稿已失效，请重新选择地点');
   const map = createMapProvider(process.env, fetch, { intervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400 });
-  const keywords = input.query ? [`${input.preference} ${input.query}`, input.query, input.preference] : [input.preference];
-  const candidates = await map.discover(day.city, 'entertainment', keywords, 16, plan.request.transport);
+  const activity = input.preference === '其他' ? input.query : input.preference;
+  const keywords = input.preference === '其他'
+    ? [activity, `${day.city} ${activity}`, `${anchor.name}附近 ${activity}`]
+    : input.query ? [`${activity} ${input.query}`, `${input.query} ${activity}`, `${anchor.name}附近 ${activity}`, activity] : [`${anchor.name}附近 ${activity}`, `${day.city} ${activity}`, activity];
+  const candidates = await map.discover(day.city, 'entertainment', keywords, 30, plan.request.transport);
   const routed = await Promise.all(candidates.map(async (candidate: any) => {
     const route = await map.route(anchor, candidate, plan.request.transport, day.city);
     const queriedAt = new Date().toISOString();
     return { id: `entertainment-${candidate.poiId}`, poiId: candidate.poiId, city: candidate.city, kind: 'entertainment' as const, name: candidate.name,
       address: candidate.address, lng: candidate.lng, lat: candidate.lat, verified: true, navigationUrl: candidate.navigationUrl, imageUrl: candidate.imageUrl, imageAttribution: amapImageAttribution(candidate.imageUrl, queriedAt),
-      time: '19:30', detail: `按“${input.preference}${input.query ? ` · ${input.query}` : ''}”查询并结合当天路线筛选；营业和消费请确认。`, duration: '约 1.5 小时', durationMinutes: 90,
-      cost: 0, costPending: true, indoor: true, routeMinutes: route.minutes, routeMeters: route.meters, preference: input.preference };
+      time: '19:30', detail: `按“${activity}${input.preference !== '其他' && input.query ? ` · ${input.query}` : ''}”查询并结合当天路线筛选；营业和消费请确认。`, duration: '约 1.5 小时', durationMinutes: 90,
+      cost: 0, costPending: true, indoor: true, routeMinutes: route.minutes, routeMeters: route.meters, preference: input.preference === '其他' ? `其他：${activity}` : input.preference };
   }));
-  const found = await fillMissingWebImages(routed.filter(option => option.routeMinutes !== null && option.routeMinutes <= 45).sort((a, b) => (a.routeMinutes ?? 999) - (b.routeMinutes ?? 999)).slice(0, 6), process.env, fetch);
+  const found = await fillMissingWebImages(routed.filter(option => option.routeMinutes !== null && option.routeMinutes <= 45).sort((a, b) => (a.routeMinutes ?? 999) - (b.routeMinutes ?? 999)).slice(0, 12), process.env, fetch);
   const entertainmentDays = plan.entertainmentDays.map((value, index) => index === input.dayIndex ? {
-    ...value, anchorName: anchor.name, selectedIds: input.selectedIds, options: [...value.options.filter(option => option.preference !== input.preference), ...found],
-    warning: found.length ? undefined : `没有找到距当天路线 45 分钟以内的${input.preference}地点。`,
+    ...value, anchorName: anchor.name, selectedIds: input.selectedIds, options: [...value.options.filter(option => input.preference === '其他' ? !option.preference.startsWith('其他：') : option.preference !== input.preference), ...found],
+    warning: found.length ? found.length < 4 ? `在 45 分钟顺路范围内仅核验到 ${found.length} 个${activity}地点，可补充区域或店名再次查询。` : undefined : `没有找到距当天路线 45 分钟以内的${activity}地点。`,
   } : value);
   return { ...plan, entertainmentDays, sources: { ...plan.sources, updatedAt: new Date().toISOString() } };
 }

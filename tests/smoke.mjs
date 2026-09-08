@@ -69,12 +69,17 @@ for (const mode of ['fixtures', 'offline']) {
     assert.equal((await action('select', 'forged-id')).status, 409);
     assert.equal((await post('/api/food', { planId: plan.planId, revision: 0, mealId, action: 'lock' })).status, 409);
 
-    const searchedEntertainment = await post('/api/plan/entertainment', { planId: plan.planId, revision: plan.revision, dayIndex: 0, preference: '足浴', query: '' });
+    const customEntertainment = await post('/api/plan/entertainment', { planId: plan.planId, revision: plan.revision, dayIndex: 0, preference: '其他', query: '密室逃脱' });
+    assert.equal(customEntertainment.status, 200, JSON.stringify(customEntertainment.value));
+    plan = customEntertainment.value;
+    assert.ok(plan.entertainmentDays[0].options.some(option => option.preference === '其他：密室逃脱'));
+    const searchedEntertainment = await post('/api/plan/entertainment', { planId: plan.planId, revision: plan.revision, dayIndex: 0, preference: '足浴', query: '', selectedIds: [] });
     assert.equal(searchedEntertainment.status, 200, JSON.stringify(searchedEntertainment.value));
     plan = searchedEntertainment.value;
-    assert.ok(plan.entertainmentDays[0].options.length > 0);
-    assert.ok(plan.entertainmentDays[0].options.every(option => option.preference === '足浴'));
-    const entertainmentId = plan.entertainmentDays[0].options[0].id;
+    const footMassageOptions = plan.entertainmentDays[0].options.filter(option => option.preference === '足浴');
+    assert.ok(footMassageOptions.length > 6);
+    assert.ok(footMassageOptions.length <= 12);
+    const entertainmentId = footMassageOptions[0].id;
     const addedEntertainment = await post('/api/plan/day', { planId: plan.planId, revision: plan.revision, dayIndex: 0, replacements: [], removedStopIds: [], entertainmentIds: [entertainmentId] });
     assert.equal(addedEntertainment.status, 200, JSON.stringify(addedEntertainment.value));
     plan = addedEntertainment.value;
