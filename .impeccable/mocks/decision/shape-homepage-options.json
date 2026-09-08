@@ -1,0 +1,40 @@
+{
+  "title": "选择 TravelCanvas 首页结构",
+  "question": "三种方案都保留现有品牌与完整功能，只改变用户从需求输入到候选、路线结果的推进方式。请选择最适合快速开始规划的一种。",
+  "options": [
+    {
+      "id": "route-first-canvas",
+      "label": "路线即首页",
+      "kicker": "THE ROLL",
+      "thesis": "让地图成为贯穿需求、候选和行程的主画布，用户在同一空间里不断补全路线。",
+      "palette": ["#226054", "#df7255", "#f6f4ee", "#fffdf8", "#18322e"],
+      "materials": ["米纸卡片", "轻量地图线稿", "悬浮规划面板"],
+      "viewport": "桌面首屏右侧约三分之二是杭州路线画布，左侧是只含目的地、日期、天数和人数的紧凑启程面板；预算、偏好和餐饮折叠在下一层。",
+      "risk": "地图视觉占比高；未配置实时底图时，降级画面也必须保持足够完整。",
+      "comp": ".impeccable/mocks/decision/route-first-canvas.png"
+    },
+    {
+      "id": "instant-departure",
+      "label": "一屏启程台",
+      "thesis": "首屏只保留四个必要决定和一个主按钮，其余条件在开始后渐进展开。",
+      "palette": ["#226054", "#df7255", "#f6f4ee", "#fffdf8", "#18322e"],
+      "materials": ["暖砂画布", "精确输入条", "轻浮起内容卡"],
+      "viewport": "品牌标题下是一条横向启程控制台，目的地、日期、天数、人数与“开始发现”在一行完成；下方立即预告可信数据来源和候选地点。",
+      "risk": "首屏极简会把预算、偏好与限制推迟，需要清楚提示后续仍可补充。",
+      "comp": ".impeccable/mocks/decision/instant-departure.png"
+    },
+    {
+      "id": "folding-journey-rail",
+      "label": "折叠旅程带",
+      "thesis": "把需求、候选和行程串成一条连续旅程轨道，当前阶段展开，完成阶段自动压缩成摘要。",
+      "palette": ["#226054", "#df7255", "#f6f4ee", "#fffdf8", "#18322e"],
+      "materials": ["行程时间线", "折叠纸页", "序号导航点"],
+      "viewport": "首屏中央是一条清晰的三阶段纵向轨道，第一阶段展开为紧凑表单，后两阶段以可预期的摘要卡露出；提交后页面原地推进而非继续无限向下堆叠。",
+      "risk": "阶段折叠规则必须可预测，否则用户回看与修改早期条件时会感到受限。",
+      "comp": ".impeccable/mocks/decision/folding-journey-rail.png"
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "comp", "toggle": true },
+  "steer": true
+}

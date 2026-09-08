@@ -7,3 +7,4 @@ coverage/
 *.log
 test-artifacts/
 *.tsbuildinfo
+.impeccable/questions/
