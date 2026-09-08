@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-08T00:00:00.000Z",
+  "title": "Design System: TravelCanvas",
+  "extensions": {
+    "colorMeta": {
+      "tea-mountain-green": { "role": "primary", "displayName": "茶山绿", "canonical": "#226054", "tonalRamp": ["#0b211d", "#12362f", "#1a4a41", "#226054", "#4b7e73", "#78a096", "#abc5be", "#e4efeb"] },
+      "pine-ink": { "role": "neutral", "displayName": "松墨色", "canonical": "#18322e", "tonalRamp": ["#091411", "#10211e", "#18322e", "#2f4b46", "#58706b", "#879793", "#bdc7c4", "#edf1ef"] },
+      "pottery-orange": { "role": "secondary", "displayName": "陶土橙", "canonical": "#df7255", "tonalRamp": ["#32140d", "#5d291c", "#8d3f2d", "#b95740", "#df7255", "#eb9b84", "#f4c3b4", "#fcebe5"] },
+      "warm-sand": { "role": "neutral", "displayName": "暖砂色", "canonical": "#f6f4ee", "tonalRamp": ["#24231f", "#403e38", "#5e5b53", "#807c72", "#a49f94", "#c9c5bc", "#e4e1da", "#f6f4ee"] },
+      "rice-paper": { "role": "neutral", "displayName": "米纸色", "canonical": "#fffdf8", "tonalRamp": ["#25241f", "#44413a", "#656158", "#88837a", "#ada79d", "#d1ccc3", "#ebe7df", "#fffdf8"] },
+      "mist-text": { "role": "neutral", "displayName": "雾灰字", "canonical": "#6b7671", "tonalRamp": ["#121714", "#252c29", "#3b4541", "#53605b", "#6b7671", "#929b97", "#bec4c1", "#edf0ee"] },
+      "stone-line": { "role": "neutral", "displayName": "石线色", "canonical": "#dedbd1", "tonalRamp": ["#211f1b", "#3b3933", "#58554d", "#77736a", "#98948b", "#bbb7ae", "#dedbd1", "#f4f2ed"] },
+      "soft-tea": { "role": "neutral", "displayName": "浅茶色", "canonical": "#dcebe0", "tonalRamp": ["#152019", "#29382e", "#405345", "#5c705f", "#7e927f", "#a5b8a8", "#c9dacd", "#edf5ef"] },
+      "warning-wash": { "role": "secondary", "displayName": "警示暖底", "canonical": "#fff2eb", "tonalRamp": ["#291a14", "#493027", "#6d493c", "#936657", "#b98776", "#ddad9d", "#f1d4c8", "#fff2eb"] },
+      "warning-ink": { "role": "secondary", "displayName": "警示棕", "canonical": "#804031", "tonalRamp": ["#28100b", "#482016", "#683023", "#804031", "#a15f4e", "#c58673", "#e3b4a5", "#f8e8e1"] },
+      "danger": { "role": "tertiary", "displayName": "风险红", "canonical": "#b83f31", "tonalRamp": ["#2b0b08", "#531812", "#7e281f", "#a4382c", "#c85c4f", "#dd887c", "#efb7af", "#fae9e6"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "旅行主标题", "purpose": "首屏主标题与关键宣言。" },
+      "display-accent": { "displayName": "目的地强调", "purpose": "首屏短语中的有限衬线强调。" },
+      "headline": { "displayName": "阶段标题", "purpose": "规划阶段与城市层级。" },
+      "title": { "displayName": "内容标题", "purpose": "地点、餐厅、地图与卡片标题。" },
+      "body": { "displayName": "任务正文", "purpose": "表单、说明与操作内容。" },
+      "label": { "displayName": "导航眉题", "purpose": "步骤、状态和来源类别。" }
+    },
+    "shadows": [
+      { "name": "menu-float", "value": "0 18px 45px #18322e2e", "purpose": "城市选择菜单等临时覆盖层。" },
+      { "name": "map-overlay", "value": "0 8px 28px #18322e26", "purpose": "地图地点详情浮层。" },
+      { "name": "sticky-action", "value": "0 10px 35px #18322e26", "purpose": "候选选择阶段的底部粘性操作条。" },
+      { "name": "selected-outline", "value": "0 0 0 2px #28584922", "purpose": "候选卡当前选中状态。" },
+      { "name": "map-marker", "value": "0 4px 12px #18322e55", "purpose": "地图编号定位针。" }
+    ],
+    "motion": [
+      { "name": "state-fast", "value": "150ms ease", "purpose": "候选选中、地图点位缩放和边框状态变化。" }
+    ],
+    "breakpoints": [
+      { "name": "compact", "value": "760px" },
+      { "name": "mobile", "value": "520px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "每个阶段唯一的主操作。",
+      "html": "<button class=\"ds-btn-primary\">开始规划</button>",
+      "css": ".ds-btn-primary{border:0;border-radius:7px;padding:13px 19px;background:var(--green,#226054);color:#fffdf8;font:700 14px Arial,\"Microsoft Yahei\",sans-serif;cursor:pointer;transition:filter .15s,transform .15s}.ds-btn-primary:hover{filter:brightness(.94)}.ds-btn-primary:active{transform:translateY(1px)}.ds-btn-primary:focus-visible{outline:3px solid var(--orange,#df7255);outline-offset:3px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "替换、核验和次要调整操作。",
+      "html": "<button class=\"ds-btn-secondary\">核验并加入</button>",
+      "css": ".ds-btn-secondary{border:1px solid #bfcfc0;border-radius:7px;padding:12px 18px;background:transparent;color:var(--green,#226054);font:700 14px Arial,\"Microsoft Yahei\",sans-serif;cursor:pointer;transition:background .15s,border-color .15s}.ds-btn-secondary:hover{background:#edf2ed;border-color:var(--green,#226054)}.ds-btn-secondary:focus-visible{outline:3px solid var(--orange,#df7255);outline-offset:3px}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "清楚、紧凑的旅行条件输入。",
+      "html": "<label class=\"ds-field-label\">出发地<input class=\"ds-field\" value=\"上海\"></label>",
+      "css": ".ds-field-label{display:grid;gap:7px;color:var(--ink,#18322e);font:700 13px Arial,\"Microsoft Yahei\",sans-serif}.ds-field{min-width:0;width:100%;padding:11px;background:#fff;color:var(--ink,#18322e);border:1px solid var(--line,#dedbd1);border-radius:7px;font:400 14px Arial,\"Microsoft Yahei\",sans-serif}.ds-field:hover{border-color:#bfcfc0}.ds-field:focus-visible{outline:3px solid var(--orange,#df7255);outline-offset:2px}"
+    },
+    {
+      "name": "Selected City Chip",
+      "kind": "chip",
+      "refersTo": "chip-selected",
+      "description": "显示目的地顺序并允许快速移除。",
+      "html": "<button class=\"ds-city-chip\"><span>1</span>杭州 ×</button>",
+      "css": ".ds-city-chip{display:flex;gap:5px;align-items:center;padding:6px 9px;color:var(--green,#226054);font:700 12px Arial,\"Microsoft Yahei\",sans-serif;background:#e6eee9;border:0;border-radius:999px;cursor:pointer}.ds-city-chip span{display:grid;width:17px;height:17px;color:#fff;background:var(--green,#226054);border-radius:50%;font-size:10px;place-items:center}.ds-city-chip:hover{background:#dcebe0}.ds-city-chip:focus-visible{outline:3px solid var(--orange,#df7255);outline-offset:3px}"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "承载一个完整规划阶段的大型纸张表面。",
+      "html": "<section class=\"ds-panel\"><span>01 / 旅行需求</span><h2>开始规划</h2><p>填写关键信息，发现适合这次行程的真实地点。</p></section>",
+      "css": ".ds-panel{padding:28px;background:var(--paper,#fffdf8);color:var(--ink,#18322e);border:1px solid var(--line,#dedbd1);border-radius:13px;font-family:Arial,\"Microsoft Yahei\",sans-serif}.ds-panel span{color:var(--orange,#df7255);font-size:11px;font-weight:700;letter-spacing:.12em}.ds-panel h2{margin:6px 0 8px;font-size:24px}.ds-panel p{margin:0;color:var(--muted,#6b7671);font-size:13px;line-height:1.7}"
+    },
+    {
+      "name": "Candidate Card",
+      "kind": "custom",
+      "description": "将地点图片、推荐理由和选择状态组合成旅行候选。",
+      "html": "<article class=\"ds-candidate\"><div class=\"ds-candidate-image\">景</div><div class=\"ds-candidate-content\"><span>景区 · 杭州</span><h3>西湖风景名胜区</h3><p>沿湖漫步，适合慢节奏城市探索。</p><button>＋ 加入行程</button></div></article>",
+      "css": ".ds-candidate{position:relative;display:grid;grid-template-columns:130px minmax(0,1fr);overflow:hidden;background:#fff;color:var(--ink,#18322e);border:1px solid var(--line,#dedbd1);border-radius:12px;font-family:Arial,\"Microsoft Yahei\",sans-serif;transition:border-color .15s,box-shadow .15s}.ds-candidate:hover{border-color:#bfcfc0;box-shadow:0 8px 28px #18322e16}.ds-candidate-image{display:grid;min-height:180px;background:#8ba79b;color:#fff;font-size:40px;place-items:center}.ds-candidate-content{padding:16px}.ds-candidate-content>span{color:var(--orange,#df7255);font-size:11px;font-weight:700;letter-spacing:.12em}.ds-candidate h3{margin:6px 0 8px;font-size:18px}.ds-candidate p{color:var(--muted,#6b7671);font-size:12px;line-height:1.65}.ds-candidate button{padding:7px 9px;color:var(--green,#226054);background:#fffdf8;border:1px solid #bfcfc0;border-radius:7px;font-weight:700}.ds-candidate button:focus-visible{outline:3px solid var(--orange,#df7255);outline-offset:3px}"
+    },
+    {
+      "name": "Pending Notice",
+      "kind": "custom",
+      "description": "呈现待确认信息与软约束，不冒充错误。",
+      "html": "<div class=\"ds-notice\"><strong>信息待确认</strong><p>营业时间和实时价格请在出发前再次核对。</p></div>",
+      "css": ".ds-notice{padding:12px 14px;background:#fff2eb;color:#804031;border-left:3px solid var(--orange,#df7255);font-family:Arial,\"Microsoft Yahei\",sans-serif}.ds-notice strong{font-size:13px}.ds-notice p{margin:4px 0 0;font-size:12px;line-height:1.6}"
+    },
+    {
+      "name": "Sticky Selection Bar",
+      "kind": "custom",
+      "description": "候选阶段持续可见的选择摘要与主操作。",
+      "html": "<div class=\"ds-selection\"><div><strong>已选择 3 个地点</strong><p>路线基础已满足。</p></div><button>生成路线 →</button></div>",
+      "css": ".ds-selection{display:flex;gap:20px;align-items:center;justify-content:space-between;padding:14px 16px;background:#fffdf5ed;color:var(--ink,#18322e);border:1px solid var(--line,#dedbd1);border-radius:11px;box-shadow:0 10px 35px #18322e26;backdrop-filter:blur(10px);font-family:Arial,\"Microsoft Yahei\",sans-serif}.ds-selection p{margin:3px 0 0;color:var(--muted,#6b7671);font-size:11px}.ds-selection button{padding:13px 19px;color:#fff;background:var(--green,#226054);border:0;border-radius:7px;font-weight:700}.ds-selection button:hover{filter:brightness(.94)}.ds-selection button:focus-visible{outline:3px solid var(--orange,#df7255);outline-offset:3px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "城市探索罗盘",
+    "overview": "TravelCanvas 的界面像一枚面向城市探索的精确罗盘：方向明确、信息可信、操作路径短，同时保留旅行本身的期待感。它用暖色纸张般的底色承载密集信息，以茶山绿表示可靠行动和已确认状态，再用陶土橙标记步骤、时间与需要注意的线索。\n\n整体气质精准、高效、专业。组件采用紧凑而清楚的边界，页面以轻微浮起的层次帮助用户辨认当前操作、悬浮选择器和关键决策区，但不能演变为企业后台或数据仪表盘。内容丰富时依靠分组、折叠和留白保持阅读节奏，而不是堆叠更多颜色或装饰。",
+    "keyCharacteristics": [
+      "暖砂底色上的纸张型内容表面",
+      "茶山绿主行动与陶土橙导航线索",
+      "高密度但有清晰阅读顺序的操作界面",
+      "轻微浮起、细边框与克制阴影共同建立层次",
+      "地点图片、路线和来源状态共同表达可信旅行感"
+    ],
+    "rules": [
+      { "name": "The Green Means Action Rule", "body": "茶山绿优先表示可以执行、已经选择或已经核验的状态，不把它稀释成大面积装饰。", "section": "colors" },
+      { "name": "The Orange Guides Rule", "body": "陶土橙用于指路和提醒；一个视区内只建立少量橙色焦点。", "section": "colors" },
+      { "name": "The Serif Is a Destination Rule", "body": "Georgia 只出现在能承载旅行情绪的短标题强调中；所有任务操作保持无衬线字体。", "section": "typography" },
+      { "name": "The Journey Before Dashboard Rule", "body": "页面可以高密度，但必须按照“需求—候选—路线”的旅行任务推进；不使用后台式左侧导航、指标墙或无意义数据卡阵列。", "section": "layout" },
+      { "name": "The Lift Has a Job Rule", "body": "只有浮层、粘性操作或当前选中项可以获得阴影；阴影必须解释交互层级。", "section": "elevation" }
+    ],
+    "dos": [
+      "Do 让每个页面阶段都有明确标题、当前任务和唯一主操作。",
+      "Do 使用茶山绿表达执行、选择和核验，使用陶土橙表达顺序与注意事项。",
+      "Do 用折叠、分组和响应式重排管理复杂信息，保持高效扫描。",
+      "Do 将地点图片、Provider 来源、查询时间和待确认状态作为旅行可信度的一部分。",
+      "Do 只在悬浮、粘性和选中状态使用轻微阴影。"
+    ],
+    "donts": [
+      "Don't 把界面改造成企业后台、指标看板或由大量同权重数据卡组成的仪表盘。",
+      "Don't 使用大面积茶山绿装饰，导致主操作和已核验状态失去辨识度。",
+      "Don't 把陶土橙同时用于多个竞争性操作；它首先是方向和提醒色。",
+      "Don't 在表单、地图数据、预算和来源信息中使用衬线字体。",
+      "Don't 用阴影替代信息层级，或给每一层嵌套卡片继续增加高度。"
+    ]
+  }
+}
