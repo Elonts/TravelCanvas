@@ -9,6 +9,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $url = "http://127.0.0.1:$Port"
 $runtimeRoot = Join-Path $env:LOCALAPPDATA 'TravelCanvas'
 $pidFile = Join-Path $runtimeRoot "server-$Port.pid"
+$buildIdFile = Join-Path $runtimeRoot "server-$Port.build-id"
 $outputLog = Join-Path $runtimeRoot "server-$Port.log"
 $errorLog = Join-Path $runtimeRoot "server-$Port-error.log"
 
@@ -45,17 +46,38 @@ if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'node_modules\next\pack
   Stop-WithMessage 'Project dependencies are missing. Run npm install once in this project, then use the launcher.'
 }
 
+$buildMarker = Join-Path $projectRoot '.next\BUILD_ID'
+$needsBuild = -not (Test-Path -LiteralPath $buildMarker)
+if (-not $needsBuild) {
+  $buildTime = (Get-Item -LiteralPath $buildMarker).LastWriteTimeUtc
+  $sourceRoots = @('app', 'lib', 'public') | ForEach-Object { Join-Path $projectRoot $_ } | Where-Object { Test-Path -LiteralPath $_ }
+  $newerSource = Get-ChildItem -LiteralPath $sourceRoots -Recurse -File | Where-Object { $_.LastWriteTimeUtc -gt $buildTime } | Select-Object -First 1
+  $configFiles = @('package.json', 'package-lock.json', 'next.config.ts', 'tsconfig.json') | ForEach-Object { Join-Path $projectRoot $_ } | Where-Object { Test-Path -LiteralPath $_ }
+  $newerConfig = Get-Item -LiteralPath $configFiles | Where-Object { $_.LastWriteTimeUtc -gt $buildTime } | Select-Object -First 1
+  $needsBuild = $null -ne $newerSource -or $null -ne $newerConfig
+}
+$currentBuildId = if (-not $needsBuild) { (Get-Content -LiteralPath $buildMarker -Raw).Trim() } else { $null }
+
 $existing = Get-LocalPage
 if (Test-TravelCanvasPage $existing) {
   $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalAddress -in @('127.0.0.1', '::1') } | Select-Object -First 1
-  if ($listener) {
-    $processInfo = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)" -ErrorAction SilentlyContinue
-    $isThisProject = $processInfo -and $processInfo.ExecutablePath -like '*\node.exe' -and $processInfo.CommandLine -like "*$projectRoot*" -and $processInfo.CommandLine -like '*next*dist*bin*next*'
-    if ($isThisProject) { [System.IO.File]::WriteAllText($pidFile, [string]$listener.OwningProcess) }
+  $processInfo = if ($listener) { Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)" -ErrorAction SilentlyContinue } else { $null }
+  $isThisProject = $processInfo -and $processInfo.ExecutablePath -like '*\node.exe' -and $processInfo.CommandLine -like "*$projectRoot*" -and $processInfo.CommandLine -like '*next*dist*bin*next*'
+  if (-not $isThisProject) {
+    Stop-WithMessage "Port $Port is serving a TravelCanvas-like page from another process. It was not stopped."
   }
-  Write-Host "TravelCanvas is already running at $url"
-  Open-TravelCanvas
-  exit 0
+  $startedBuildId = if (Test-Path -LiteralPath $buildIdFile) { (Get-Content -LiteralPath $buildIdFile -Raw).Trim() } else { $null }
+  if (-not $needsBuild -and $currentBuildId -and $startedBuildId -eq $currentBuildId) {
+    [System.IO.File]::WriteAllText($pidFile, [string]$listener.OwningProcess)
+    Write-Host "TravelCanvas is already running at $url"
+    Open-TravelCanvas
+    exit 0
+  }
+  Write-Host 'A newer TravelCanvas build is available. Restarting the verified local server...'
+  Stop-Process -Id $listener.OwningProcess -Force
+  Wait-Process -Id $listener.OwningProcess -Timeout 8 -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $pidFile, $buildIdFile -Force -ErrorAction SilentlyContinue
+  $existing = $null
 }
 if ($existing) {
   Stop-WithMessage "Port $Port is already used by another web application. Close it or start TravelCanvas on another port."
@@ -67,18 +89,7 @@ if (Test-Path -LiteralPath $pidFile) {
   if ($savedProcess) {
     Stop-WithMessage "A TravelCanvas background process still exists but is not responding. Double-click Stop TravelCanvas, then start it again. Logs: $errorLog"
   }
-  Remove-Item -LiteralPath $pidFile -Force
-}
-
-$buildMarker = Join-Path $projectRoot '.next\BUILD_ID'
-$needsBuild = -not (Test-Path -LiteralPath $buildMarker)
-if (-not $needsBuild) {
-  $buildTime = (Get-Item -LiteralPath $buildMarker).LastWriteTimeUtc
-  $sourceRoots = @('app', 'lib', 'public') | ForEach-Object { Join-Path $projectRoot $_ } | Where-Object { Test-Path -LiteralPath $_ }
-  $newerSource = Get-ChildItem -LiteralPath $sourceRoots -Recurse -File | Where-Object { $_.LastWriteTimeUtc -gt $buildTime } | Select-Object -First 1
-  $configFiles = @('package.json', 'package-lock.json', 'next.config.ts', 'tsconfig.json') | ForEach-Object { Join-Path $projectRoot $_ } | Where-Object { Test-Path -LiteralPath $_ }
-  $newerConfig = Get-Item -LiteralPath $configFiles | Where-Object { $_.LastWriteTimeUtc -gt $buildTime } | Select-Object -First 1
-  $needsBuild = $null -ne $newerSource -or $null -ne $newerConfig
+  Remove-Item -LiteralPath $pidFile, $buildIdFile -Force -ErrorAction SilentlyContinue
 }
 
 if ($needsBuild) {
@@ -87,6 +98,7 @@ if ($needsBuild) {
   if ($LASTEXITCODE -ne 0) {
     Stop-WithMessage 'The production build failed. Review the build output before starting the site.'
   }
+  $currentBuildId = (Get-Content -LiteralPath $buildMarker -Raw).Trim()
 }
 
 Write-Host "Starting TravelCanvas at $url ..."
@@ -97,12 +109,13 @@ $server = Start-Process -FilePath $node.Source -ArgumentList $serverArguments -W
 
 for ($attempt = 0; $attempt -lt 100; $attempt++) {
   if ($server.HasExited) {
-    Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $pidFile, $buildIdFile -Force -ErrorAction SilentlyContinue
     $details = if (Test-Path -LiteralPath $errorLog) { (Get-Content -LiteralPath $errorLog -Tail 8) -join [Environment]::NewLine } else { 'No error log was written.' }
     Stop-WithMessage "The server stopped before it was ready. $details"
   }
   $response = Get-LocalPage
   if (Test-TravelCanvasPage $response) {
+    [System.IO.File]::WriteAllText($buildIdFile, $currentBuildId)
     Write-Host 'TravelCanvas is ready. Opening the browser...'
     Open-TravelCanvas
     exit 0
@@ -111,5 +124,5 @@ for ($attempt = 0; $attempt -lt 100; $attempt++) {
 }
 
 Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $pidFile, $buildIdFile -Force -ErrorAction SilentlyContinue
 Stop-WithMessage "TravelCanvas did not become ready within 30 seconds. Logs: $outputLog and $errorLog"

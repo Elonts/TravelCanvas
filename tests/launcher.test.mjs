@@ -33,6 +33,16 @@ test('launcher rebuilds only when the production build is missing or older than 
   assert.match(script, /TravelCanvas is already running/);
 });
 
+test('launcher restarts only the verified project server when its recorded build is stale', () => {
+  assert.match(script, /server-\$Port\.build-id/);
+  assert.match(script, /startedBuildId -eq \$currentBuildId/);
+  assert.match(script, /A newer TravelCanvas build is available/);
+  assert.match(script, /Stop-Process -Id \$listener\.OwningProcess/);
+  assert.match(script, /\$existing = \$null/);
+  assert.ok(script.indexOf('if (-not $isThisProject)') < script.indexOf('Stop-Process -Id $listener.OwningProcess'));
+  assert.match(stopScript, /server-\$Port\.build-id/);
+});
+
 test('launcher records the background process and the stop command only terminates the matching Next process', () => {
   assert.match(script, /server-\$Port\.pid/);
   assert.match(script, /Get-NetTCPConnection -LocalPort \$Port/);

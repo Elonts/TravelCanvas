@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $runtimeRoot = Join-Path $env:LOCALAPPDATA 'TravelCanvas'
 $pidFile = Join-Path $runtimeRoot "server-$Port.pid"
+$buildIdFile = Join-Path $runtimeRoot "server-$Port.build-id"
 
 if (-not (Test-Path -LiteralPath $pidFile)) {
   Write-Host "TravelCanvas is not running on port $Port."
@@ -25,4 +26,4 @@ if ($isThisProject) {
   Write-Host 'TravelCanvas was already stopped.'
 }
 
-Remove-Item -LiteralPath $pidFile -Force
+Remove-Item -LiteralPath $pidFile, $buildIdFile -Force -ErrorAction SilentlyContinue
