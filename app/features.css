@@ -55,6 +55,10 @@
 .map-empty { padding: 80px 20px; text-align: center; }
 .route-map button { justify-self: auto; }
 .candidate-panel { margin-top: 26px; }
+.candidate-summary { display: flex; gap: 20px; align-items: center; justify-content: space-between; margin-top: 26px; padding: 18px 22px; }
+.candidate-summary h2 { margin: 5px 0; font-size: 20px; }
+.candidate-summary p { margin: 0; color: var(--muted); font-size: 12px; }
+.candidate-summary button { flex: 0 0 auto; width: auto; }
 .candidate-warnings { margin: 12px 0 0; }
 .candidate-warnings p { color: var(--muted); font-size: 12px; }
 .candidate-city { padding: 22px 0; border-bottom: 1px solid var(--line); }
@@ -130,6 +134,7 @@
 }
 
 @media (max-width: 520px) {
+  .candidate-summary { align-items: stretch; flex-direction: column; }
   .city-groups section > div { grid-template-columns: repeat(2, 1fr); }
   .city-menu { position: fixed; top: 90px; right: 12px; bottom: 20px; left: 12px; }
   .city-groups { max-height: calc(100vh - 180px); }

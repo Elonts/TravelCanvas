@@ -21,13 +21,15 @@ try {
       assert.equal(await page.locator('.journey-preview[data-state="idle"]').count(), 1);
       assert.ok((await page.locator('.journey-preview-foot').innerText()).includes('不代表真实路线'));
       await page.setViewportSize({ width: 390, height: 844 });
-      const mobileActionRect = await page.getByRole('button', { name: '开始发现地点' }).evaluate(element => element.getBoundingClientRect().toJSON());
+      const mobileActionRect = await page.getByRole('button', { name: '请先选择目的地' }).evaluate(element => element.getBoundingClientRect().toJSON());
       assert.ok(mobileActionRect.top >= 0 && mobileActionRect.bottom <= 844, 'Mobile primary action must be visible in the first viewport');
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.getByLabel('选择一个或多个目的地城市').click();
       await page.getByLabel('搜索省份或城市').fill('浙江');
       assert.equal(await page.getByText('浙江省', { exact: true }).count(), 1);
-      assert.equal(await page.getByLabel('杭州').isChecked(), true);
+      assert.equal(await page.getByLabel('杭州').isChecked(), false);
+      assert.equal(await page.getByRole('button', { name: '请先选择目的地' }).isDisabled(), true);
+      await page.getByLabel('杭州').check();
       await page.getByLabel('选择一个或多个目的地城市').click();
       await page.getByLabel('旅行天数').fill('1');
       await page.locator('.advanced-planning > summary').click();
@@ -58,6 +60,9 @@ try {
         assert.ok(await page.getByText(/小红书公开笔记证据/).count() > 0);
         await page.getByRole('button', { name: /用已选地点生成路线/ }).click();
         await page.locator('.result').waitFor({ timeout: 60000 });
+        await page.getByText('已收起候选地点').waitFor();
+        await page.getByRole('button', { name: '展开并修改选择' }).click();
+        await page.getByText('先挑喜欢的，再安排路线').waitFor();
         assert.equal(await page.locator('.journey-live[data-state="plan"]').count(), 1);
         await page.locator('.route-map').waitFor();
         assert.ok(await page.locator('.map-point-list button').count() >= 3);

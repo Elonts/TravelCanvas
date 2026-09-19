@@ -22,7 +22,8 @@ export default function Home() {
   const [changing, setChanging] = useState(false);
   const [error, setError] = useState('');
   const [changeError, setChangeError] = useState('');
-  const [destinations, setDestinations] = useState<string[]>(['杭州']);
+  const [destinations, setDestinations] = useState<string[]>([]);
+  const [candidateExpanded, setCandidateExpanded] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setLoading(true); setError(''); setChangeError('');
     try {
@@ -31,7 +32,7 @@ export default function Home() {
       body.destinations = destinations;
       const response = await fetch('/api/discover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await response.json(); if (!response.ok) throw Error(json.error);
-      setDiscovery(json); setSelectedIds([]); setPlan(null);
+      setDiscovery(json); setSelectedIds([]); setPlan(null); setCandidateExpanded(true);
     } catch (e) { setError(userFacingRequestError(e, '候选发现失败')); } finally { setLoading(false); }
   }
   const generatePlan = async () => {
@@ -39,7 +40,7 @@ export default function Home() {
     setLoading(true); setError('');
     try {
       const response = await fetch('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discoveryId: discovery.discoveryId, selectedIds }) });
-      const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
+      const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json); setCandidateExpanded(false);
     } catch (e) { setError(userFacingRequestError(e, '路线生成失败')); } finally { setLoading(false); }
   };
   const toggleCandidate = (id: string) => setSelectedIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
@@ -123,7 +124,7 @@ export default function Home() {
                 </details>
               </div>
             </details>
-            <button className="primary-action" disabled={loading || changing}>{loading && !discovery ? '正在核验地点与来源…' : '开始发现地点'}</button>
+            <button className="primary-action" disabled={loading || changing || !destinations.length}>{!destinations.length ? '请先选择目的地' : loading && !discovery ? '正在核验地点与来源…' : '开始发现地点'}</button>
             <p className="planner-meta">AI 负责发现灵感；地点、路线、来源与查询时间会单独标注。</p>
           </form>
           {error && <p className="error" role="alert">{error}</p>}
@@ -131,7 +132,9 @@ export default function Home() {
       </div>
       <aside className="experience-map"><JourneyCanvas destinations={destinations} discovery={discovery} selectedIds={selectedIds} plan={plan} loading={loading} /></aside>
       {(discovery || plan) && <div className="stage-content">
-        {discovery && <CandidatePicker discovery={discovery} selectedIds={selectedIds} busy={loading} error={plan ? '' : error} onToggle={toggleCandidate} onGenerate={generatePlan} onAddCustom={addCustomCandidates} />}
+        {discovery && (candidateExpanded
+          ? <CandidatePicker discovery={discovery} selectedIds={selectedIds} busy={loading} error={plan ? '' : error} onToggle={toggleCandidate} onGenerate={generatePlan} onAddCustom={addCustomCandidates} />
+          : <section className="candidate-summary panel"><div><span className="eyebrow">02 / 选择想去的地方</span><h2>已收起候选地点</h2><p>已选 {discovery.candidates.filter(candidate => selectedIds.includes(candidate.id) && candidate.kind === 'attraction').length} 个景区、{discovery.candidates.filter(candidate => selectedIds.includes(candidate.id) && candidate.kind === 'food').length} 家餐厅。展开修改后需重新生成路线才会生效。</p></div><button type="button" className="secondary" onClick={() => setCandidateExpanded(true)}>展开并修改选择</button></section>)}
         {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} onSearchEntertainment={searchEntertainment} onReplanDay={replanDay} changeError={changeError} />}
       </div>}
     </section>
