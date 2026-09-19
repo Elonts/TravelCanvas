@@ -24,3 +24,11 @@ test('unlocated and unselected places are not shown as verified map markers', ()
   const input = [{ ...days[0], stops: [...stops, { ...stops[0], id: 'unknown', name: '待核验', lng: 0, lat: 0 }] }];
   assert.deepEqual(createRoutePoints(null, request, input, noSelection).map(point => point.name), ['景点甲', '景点乙']);
 });
+
+test('booked hotels appear as the verified start and end points of each day', () => {
+  const hotel = { poiId: 'hotel-1', name: '测试酒店', address: '酒店地址', lng: 120.12, lat: 30.22, verified: true };
+  const anchored = [{ ...days[0], startHotel: hotel, endHotel: hotel }];
+  const points = createRoutePoints(null, request, anchored, { meals: [] });
+  assert.deepEqual(points.map(point => point.kind), ['hotel', 'attraction', 'attraction', 'hotel']);
+  assert.deepEqual(points.filter(point => point.kind === 'hotel').map(point => point.time), ['08:30', '22:30']);
+});

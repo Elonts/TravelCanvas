@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, Fragment, useEffect, useState } from 'react';
-import type { Plan } from '../lib/plan';
+import type { EntertainmentPeriod, EntertainmentSelection, Plan } from '../lib/plan';
 import { FoodSummary, MealCard, SourceTip, type MealAction } from './food-view';
 import { CityMultiSelect } from './city-multi-select';
 import { JourneyCanvas } from './journey-canvas';
@@ -11,6 +11,7 @@ import { userFacingRequestError } from '../lib/client-errors.mjs';
 import { ENTERTAINMENT_TYPES } from '../lib/entertainment';
 
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
 const sourceName = (state: string) => state === 'live' ? '已查询' : state === 'demo' ? '演示数据' : '待确认';
 const routeDistance = (meters: number | null) => meters === null ? '距离待确认' : `距离 ${Math.round(meters / 100) / 10} 公里`;
 
@@ -23,6 +24,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [changeError, setChangeError] = useState('');
   const [destinations, setDestinations] = useState<string[]>([]);
+  const [bookedHotels, setBookedHotels] = useState<{ city: string; name: string; addressHint: string; checkIn: string; checkOut: string }[]>([]);
   const [candidateExpanded, setCandidateExpanded] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setLoading(true); setError(''); setChangeError('');
@@ -30,6 +32,7 @@ export default function Home() {
       if (!destinations.length) throw Error('请至少选择一个目的地城市');
       const body: Record<string, FormDataEntryValue | string[]> = Object.fromEntries(new FormData(event.currentTarget));
       body.destinations = destinations;
+      (body as Record<string, unknown>).bookedHotels = bookedHotels.filter(hotel => hotel.city && hotel.name.trim());
       const response = await fetch('/api/discover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await response.json(); if (!response.ok) throw Error(json.error);
       setDiscovery(json); setSelectedIds([]); setPlan(null); setCandidateExpanded(true);
@@ -71,11 +74,11 @@ export default function Home() {
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
     } catch (e) { setChangeError(userFacingRequestError(e, '娱乐地点查询失败')); } finally { setChanging(false); }
   };
-  const replanDay = async (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentIds: string[]) => {
+  const replanDay = async (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentSelections: EntertainmentSelection[]) => {
     if (!plan?.planId || plan.revision === undefined || changing || loading) return;
     setChanging(true); setChangeError('');
     try {
-      const response = await fetch('/api/plan/day', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, dayIndex, replacements, removedStopIds: [], entertainmentIds }) });
+      const response = await fetch('/api/plan/day', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, dayIndex, replacements, removedStopIds: [], entertainmentSelections }) });
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
     } catch (e) { setChangeError(userFacingRequestError(e, '当天路线重新规划失败')); } finally { setChanging(false); }
   };
@@ -93,7 +96,7 @@ export default function Home() {
           <form className="planner-form" onSubmit={submit}>
             <div className="quick-grid">
               <label>出发地<input required name="origin" placeholder="城市、车站或具体地址" defaultValue="上海" maxLength={60} /></label>
-              <div className="destination-field"><span className="field-label">目的地（可多选）</span><CityMultiSelect value={destinations} onChange={setDestinations} /></div>
+              <div className="destination-field"><span className="field-label">目的地（可多选）</span><CityMultiSelect value={destinations} onChange={value => { setDestinations(value); setBookedHotels(current => current.filter(hotel => value.includes(hotel.city))); }} /></div>
               <label>出发日期<input required type="date" name="startDate" defaultValue={today} /></label>
               <label>旅行天数<input required type="number" name="days" min="1" max="10" defaultValue="2" /></label>
               <label>出行人数<input required type="number" name="travelers" min="1" max="8" defaultValue="2" /></label>
@@ -110,6 +113,17 @@ export default function Home() {
                   <label>旅行偏好<textarea name="preferences" placeholder="如：西湖、茶文化、慢节奏" maxLength={300} /></label>
                   <label>旅行限制<textarea name="constraints" placeholder="如：避免高强度徒步、不安排夜间行程" maxLength={300} /></label>
                 </div>
+                <details className="booked-hotel-input"><summary>添加已预订酒店（可选）</summary><p className="form-help">酒店会先通过高德核验，再作为对应日期每天的实际起点或终点。</p>
+                  <div className="hotel-list">{bookedHotels.map((hotel, index) => <div className="hotel-row" key={index}>
+                    <label>城市<select aria-label={`酒店 ${index + 1} 城市`} value={hotel.city} onChange={event => setBookedHotels(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, city: event.target.value } : item))}>{destinations.map(city => <option key={city}>{city}</option>)}</select></label>
+                    <label>酒店正式名称<input aria-label={`酒店 ${index + 1} 名称`} value={hotel.name} onChange={event => setBookedHotels(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} maxLength={120} placeholder="如：杭州西湖希尔顿嘉悦里酒店" /></label>
+                    <label>地址或分店提示<input aria-label={`酒店 ${index + 1} 地址`} value={hotel.addressHint} onChange={event => setBookedHotels(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, addressHint: event.target.value } : item))} maxLength={160} placeholder="可选，用于同名酒店消歧" /></label>
+                    <label>入住<input aria-label={`酒店 ${index + 1} 入住日期`} type="date" value={hotel.checkIn} onChange={event => setBookedHotels(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, checkIn: event.target.value } : item))} /></label>
+                    <label>退房<input aria-label={`酒店 ${index + 1} 退房日期`} type="date" value={hotel.checkOut} onChange={event => setBookedHotels(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, checkOut: event.target.value } : item))} /></label>
+                    <button type="button" className="text-button" onClick={() => setBookedHotels(current => current.filter((_, itemIndex) => itemIndex !== index))}>删除</button>
+                  </div>)}</div>
+                  <button type="button" className="hotel-add secondary" disabled={!destinations.length || bookedHotels.length >= 10} onClick={() => setBookedHotels(current => [...current, { city: destinations[0], name: '', addressHint: '', checkIn: today, checkOut: tomorrow }])}>添加一家已订酒店</button>
+                </details>
                 <fieldset><legend>把美食安排进路线</legend><div className="grid compact-grid">
                   <label>餐饮偏好<input name="foodPreferences" placeholder="如：杭帮菜、面食、清淡" maxLength={300} /></label>
                   <label>饮食禁忌 / 过敏<input name="dietary" placeholder="如：不吃牛肉、花生过敏" maxLength={200} /></label>
@@ -141,10 +155,11 @@ export default function Home() {
   </main>;
 }
 
-function PlanView({ plan, busy, onAction, onSearchEntertainment, onReplanDay, changeError }: { plan: Plan; busy: boolean; onAction: MealAction; onSearchEntertainment: (dayIndex: number, preference: string, query: string, selectedIds: string[]) => Promise<void>; onReplanDay: (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentIds: string[]) => Promise<void>; changeError: string }) {
+function PlanView({ plan, busy, onAction, onSearchEntertainment, onReplanDay, changeError }: { plan: Plan; busy: boolean; onAction: MealAction; onSearchEntertainment: (dayIndex: number, preference: string, query: string, selectedIds: string[]) => Promise<void>; onReplanDay: (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentSelections: EntertainmentSelection[]) => Promise<void>; changeError: string }) {
   const [activeDay, setActiveDay] = useState(0);
   const [replacementNames, setReplacementNames] = useState<Record<string, string>>({});
-  const [entertainmentIds, setEntertainmentIds] = useState<Record<number, string[]>>({});
+  const [entertainmentSelections, setEntertainmentSelections] = useState<Record<number, EntertainmentSelection[]>>({});
+  const [entertainmentPeriods, setEntertainmentPeriods] = useState<Record<number, EntertainmentPeriod>>({});
   const [entertainmentTypes, setEntertainmentTypes] = useState<Record<number, string>>({});
   const [entertainmentQueries, setEntertainmentQueries] = useState<Record<number, string>>({});
   const [venueChoices, setVenueChoices] = useState<Record<number, string>>({});
@@ -159,17 +174,19 @@ function PlanView({ plan, busy, onAction, onSearchEntertainment, onReplanDay, ch
   const entertainment = plan.entertainmentDays[activeDay];
   const entertainmentType = entertainmentTypes[activeDay] || ENTERTAINMENT_TYPES[0];
   const entertainmentQuery = entertainmentQueries[activeDay] || '';
-  const entertainmentSelection = entertainmentIds[activeDay] ?? entertainment?.selectedIds ?? [];
+  const entertainmentSelection = entertainmentSelections[activeDay] ?? entertainment?.selections ?? [];
+  const entertainmentIds = entertainmentSelection.map(selection => selection.id);
+  const entertainmentPeriod = entertainmentPeriods[activeDay] || 'evening';
   const entertainmentOptions = entertainment?.options.filter(option => entertainmentType === '其他' ? option.preference.startsWith('其他：') : option.preference === entertainmentType) || [];
   const venueChoice = venueChoices[activeDay] || '';
   const replacements = plan.days[activeDay]?.stops.filter(stop => stop.kind !== 'entertainment' && replacementNames[stop.id]?.trim()).map(stop => ({ stopId: stop.id, name: replacementNames[stop.id].trim() })) || [];
-  const dayDirty = replacements.length > 0 || entertainmentSelection.join('|') !== (entertainment?.selectedIds || []).join('|');
-  const selectedEntertainment = entertainmentSelection.map(id => entertainment?.options.find(option => option.id === id)).filter(Boolean);
+  const dayDirty = replacements.length > 0 || JSON.stringify(entertainmentSelection) !== JSON.stringify(entertainment?.selections || []);
+  const selectedEntertainment = entertainmentSelection.map(selection => ({ selection, option: entertainment?.options.find(option => option.id === selection.id) })).filter(item => item.option);
   const addEntertainment = () => {
     if (!venueChoice) return;
-    setEntertainmentIds(current => {
-      const selected = current[activeDay] ?? entertainment?.selectedIds ?? [];
-      return selected.includes(venueChoice) || selected.length >= 3 ? current : { ...current, [activeDay]: [...selected, venueChoice] };
+    setEntertainmentSelections(current => {
+      const selected = current[activeDay] ?? entertainment?.selections ?? [];
+      return selected.some(item => item.id === venueChoice) || selected.length >= 3 ? current : { ...current, [activeDay]: [...selected, { id: venueChoice, period: entertainmentPeriod }] };
     });
     setVenueChoices(current => ({ ...current, [activeDay]: '' }));
   };
@@ -179,7 +196,7 @@ function PlanView({ plan, busy, onAction, onSearchEntertainment, onReplanDay, ch
     {!!plan.food.warnings.length && <div className="notice">{plan.food.warnings.map(warning => <p key={warning}>{warning}</p>)}</div>}
     {changeError && <p className="error change-error" role="alert">{changeError}</p>}
     <div className="day-tabs" role="tablist" aria-label="按天查看行程">{plan.days.map((day, index) => <button type="button" role="tab" aria-selected={activeDay === index} className={activeDay === index ? 'active' : 'secondary'} key={day.date} onClick={() => setActiveDay(index)}>第 {index + 1} 天 · {day.city}</button>)}</div>
-    {guide && <div className="day-guide"><div><span className="eyebrow">当天气象 · {sourceName(guide.weather.state)}</span><h4>{guide.weather.summary}</h4>{guide.weather.state === 'live' && <p>{guide.weather.low}°—{guide.weather.high}° · 降水 {guide.weather.rain}%</p>}<small>Open-Meteo · {new Date(guide.weather.updatedAt).toLocaleString('zh-CN')}</small></div><div className="day-hotels"><span className="eyebrow">当天住宿建议</span>{guide.hotels.slice(0, 2).map(hotel => <div key={hotel.id}><h4>{hotel.area}</h4><p>{hotel.rationale}</p><a href={hotel.ctripUrl} target="_blank" rel="noreferrer">去携程查看酒店 →</a></div>)}<small>实时房价、库存与取消规则以携程页面为准</small></div><div><span className="eyebrow">当天出行提醒</span><ul>{guide.reminders.map(item => <li key={item}>{item}</li>)}</ul></div></div>}
+    {guide && <div className="day-guide"><div><span className="eyebrow">当天气象 · {sourceName(guide.weather.state)}</span><h4>{guide.weather.summary}</h4>{guide.weather.state === 'live' && guide.weather.low !== null && guide.weather.high !== null && <p>{guide.weather.low}°—{guide.weather.high}°{guide.weather.rain !== null ? ` · 降水 ${guide.weather.rain}%` : ''}</p>}<small>{guide.weather.provider} · 查询 {new Date(guide.weather.queriedAt).toLocaleString('zh-CN')}{guide.weather.issuedAt ? ` · 预报发布 ${new Date(guide.weather.issuedAt).toLocaleString('zh-CN')}` : ''}</small></div><div className="day-hotels"><span className="eyebrow">{guide.hotels[0]?.booked ? '已预订酒店' : '当天住宿建议'}</span>{guide.hotels.slice(0, 2).map(hotel => <div key={hotel.id}><h4>{hotel.area}</h4><p>{hotel.rationale}</p>{hotel.address && <p className="address">⌖ {hotel.address}</p>}{hotel.navigationUrl ? <a href={hotel.navigationUrl} target="_blank" rel="noreferrer">在高德查看 / 导航 →</a> : hotel.ctripUrl && <a href={hotel.ctripUrl} target="_blank" rel="noreferrer">去携程查看酒店 →</a>}</div>)}<small>{guide.hotels[0]?.booked ? '订单、费用和入住政策以原预订平台为准' : '实时房价、库存与取消规则以携程页面为准'}</small></div><div><span className="eyebrow">当天出行提醒</span><ul>{guide.reminders.map(item => <li key={item}>{item}</li>)}</ul></div></div>}
     <div className="layout"><div>{plan.days.map((day, dayIndex) => activeDay === dayIndex && <article className="day" key={day.date}>
       <h3>{day.title}<small>{day.date}</small></h3>
       {day.warning && <p className="notice">{day.warning}</p>}
@@ -192,9 +209,9 @@ function PlanView({ plan, busy, onAction, onSearchEntertainment, onReplanDay, ch
         {plan.food.meals.filter(meal => meal.slot.dayIndex === dayIndex && meal.slot.previous.id === stop.id).map(meal => <MealCard key={meal.slot.id} meal={meal} food={plan.food} busy={busy} onAction={onAction} />)}
       </Fragment>)}
       <div className="day-editor"><span className="eyebrow">顺路娱乐活动</span><p>先选择想玩的类型，再查找距当天路线 15 公里以内的具体地点。默认安排 1 个，也可继续添加，最多 3 个。</p>
-        <div className="entertainment-search"><label>娱乐项目<select aria-label="娱乐项目" value={entertainmentType} onChange={event => { setEntertainmentTypes(current => ({ ...current, [activeDay]: event.target.value })); setEntertainmentQueries(current => ({ ...current, [activeDay]: '' })); setVenueChoices(current => ({ ...current, [activeDay]: '' })); }}>{ENTERTAINMENT_TYPES.map(item => <option key={item}>{item}</option>)}<option value="其他">其他</option></select></label><label>{entertainmentType === '其他' ? '具体活动类型（必填）' : '希望在哪个区域或哪家店（可选）'}<input aria-label={entertainmentType === '其他' ? '具体活动类型（必填）' : '希望在哪个区域或哪家店（可选）'} value={entertainmentQuery} onChange={event => setEntertainmentQueries(current => ({ ...current, [activeDay]: event.target.value }))} maxLength={100} placeholder={entertainmentType === '其他' ? '如：密室逃脱、Livehouse、电玩城' : '如：西湖附近、某家酒馆'} /></label><button className="secondary" type="button" disabled={busy || (entertainmentType === '其他' && entertainmentQuery.trim().length < 2)} onClick={() => onSearchEntertainment(activeDay, entertainmentType, entertainmentQuery.trim(), entertainmentSelection)}>{busy ? '正在查询…' : '按当天路线查找地点'}</button></div>
-        {!!entertainmentOptions.length && <div className="entertainment-add"><label>推荐的具体地点<select aria-label="推荐的具体地点" value={venueChoice} onChange={event => setVenueChoices(current => ({ ...current, [activeDay]: event.target.value }))}><option value="">请选择地点</option>{entertainmentOptions.map(option => <option key={option.id} value={option.id}>{option.name} · 从 {entertainment.anchorName} {routeDistance(option.routeMeters)} · 约 {option.routeMinutes ?? '待确认'} 分钟</option>)}</select></label><button className="secondary" type="button" disabled={!venueChoice || entertainmentSelection.length >= 3} onClick={addEntertainment}>添加到当天草稿</button></div>}
-        {!!selectedEntertainment.length && <div className="entertainment-draft"><b>当天娱乐草稿</b>{selectedEntertainment.map(option => option && <div key={option.id}><span>{option.preference} · {option.name} · {routeDistance(option.routeMeters)} · 约 {option.routeMinutes ?? '待确认'} 分钟</span><button type="button" className="text-button" onClick={() => setEntertainmentIds(current => ({ ...current, [activeDay]: entertainmentSelection.filter(id => id !== option.id) }))}>删除</button></div>)}</div>}
+        <div className="entertainment-search"><label>娱乐项目<select aria-label="娱乐项目" value={entertainmentType} onChange={event => { setEntertainmentTypes(current => ({ ...current, [activeDay]: event.target.value })); setEntertainmentQueries(current => ({ ...current, [activeDay]: '' })); setVenueChoices(current => ({ ...current, [activeDay]: '' })); }}>{ENTERTAINMENT_TYPES.map(item => <option key={item}>{item}</option>)}<option value="其他">其他</option></select></label><label>{entertainmentType === '其他' ? '具体活动类型（必填）' : '希望在哪个区域或哪家店（可选）'}<input aria-label={entertainmentType === '其他' ? '具体活动类型（必填）' : '希望在哪个区域或哪家店（可选）'} value={entertainmentQuery} onChange={event => setEntertainmentQueries(current => ({ ...current, [activeDay]: event.target.value }))} maxLength={100} placeholder={entertainmentType === '其他' ? '如：密室逃脱、Livehouse、电玩城' : '如：西湖附近、某家酒馆'} /></label><button className="secondary" type="button" disabled={busy || (entertainmentType === '其他' && entertainmentQuery.trim().length < 2)} onClick={() => onSearchEntertainment(activeDay, entertainmentType, entertainmentQuery.trim(), entertainmentIds)}>{busy ? '正在查询…' : '按当天路线查找地点'}</button></div>
+        {!!entertainmentOptions.length && <div className="entertainment-add"><label>推荐的具体地点<select aria-label="推荐的具体地点" value={venueChoice} onChange={event => setVenueChoices(current => ({ ...current, [activeDay]: event.target.value }))}><option value="">请选择地点</option>{entertainmentOptions.map(option => <option key={option.id} value={option.id}>{option.name} · 从 {entertainment.anchorName} {routeDistance(option.routeMeters)} · 约 {option.routeMinutes ?? '待确认'} 分钟</option>)}</select></label><label>安排时间段<select aria-label="娱乐活动时间段" value={entertainmentPeriod} onChange={event => setEntertainmentPeriods(current => ({ ...current, [activeDay]: event.target.value as EntertainmentPeriod }))}><option value="morning">上午 09:00–12:00</option><option value="afternoon">下午 13:30–18:00</option><option value="evening">晚上 19:00–23:00</option></select></label><button className="secondary" type="button" disabled={!venueChoice || entertainmentSelection.length >= 3} onClick={addEntertainment}>添加到当天草稿</button></div>}
+        {!!selectedEntertainment.length && <div className="entertainment-draft"><b>当天娱乐草稿</b>{selectedEntertainment.map(({ option, selection }) => option && <div key={option.id}><span>{option.preference} · {option.name} · {{ morning: '上午', afternoon: '下午', evening: '晚上' }[selection.period]} · {routeDistance(option.routeMeters)} · 约 {option.routeMinutes ?? '待确认'} 分钟</span><label>时间段<select aria-label={`${option.name}时间段`} value={selection.period} onChange={event => setEntertainmentSelections(current => ({ ...current, [activeDay]: entertainmentSelection.map(item => item.id === option.id ? { ...item, period: event.target.value as EntertainmentPeriod } : item) }))}><option value="morning">上午</option><option value="afternoon">下午</option><option value="evening">晚上</option></select></label><button type="button" className="text-button" onClick={() => setEntertainmentSelections(current => ({ ...current, [activeDay]: entertainmentSelection.filter(item => item.id !== option.id) }))}>删除</button></div>)}</div>}
         {entertainment?.warning && <p>{entertainment.warning}</p>}<button type="button" disabled={busy || !dayDirty} onClick={() => onReplanDay(activeDay, replacements, entertainmentSelection)}>{busy ? '正在核验地点并重新规划…' : '保存修改并重新规划当天路线'}</button><small>景点替换和娱乐更改会在点击此按钮后一次生效；检索本身不会立即改变路线。</small></div>
     </article>)}
       {!!generalTips.length && <div className="card"><span className="eyebrow">攻略参考 · 尚未匹配具体行程地点</span>{generalTips.map(tip => <SourceTip key={tip.id} tip={tip} food={plan.food} />)}</div>}

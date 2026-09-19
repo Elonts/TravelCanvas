@@ -15,6 +15,6 @@ export async function POST(request: Request) {
     return NextResponse.json(planStore.replace(parsed.data.planId, parsed.data.revision, updated), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : '当天路线重新规划失败。';
-    return NextResponse.json({ error: message }, { status: /过期|版本|变化|失效/.test(message) ? 409 : 503 });
+    return NextResponse.json({ error: message }, { status: /过期|版本|变化|失效|无法容纳|无法安排/.test(message) ? 409 : 503 });
   }
 }

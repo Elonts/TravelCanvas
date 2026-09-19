@@ -1,0 +1,2 @@
+export type WeatherSnapshot = { city: string; date: string; summary: string; high: number | null; low: number | null; rain: number | null; state: 'live' | 'pending'; provider: string; issuedAt: string | null; queriedAt: string };
+export function queryWeather(city: string, date: string, location: { lng: number; lat: number; adcode?: string } | null, env?: NodeJS.ProcessEnv, fetcher?: typeof fetch): Promise<WeatherSnapshot>;

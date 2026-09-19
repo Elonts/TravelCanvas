@@ -29,6 +29,7 @@
 .amap-container { width: 100%; height: clamp(420px, 52vw, 610px); }
 .amap-order-marker { display: grid; width: 36px; height: 36px; padding: 0; color: white; font-weight: 800; background: var(--green); border: 3px solid white; border-radius: 50% 50% 50% 8px; box-shadow: 0 4px 12px #18322e55; transform: rotate(-45deg); place-items: center; }
 .amap-order-marker span { transform: rotate(45deg); }
+.amap-order-marker.hotel { background: #a5522b; }
 .map-fallback { position: absolute; inset: 0; display: grid; padding: 40px; background: #edf2ed; place-content: center; text-align: center; }
 .map-fallback p { max-width: 520px; color: var(--muted); }
 .map-marker { cursor: pointer; outline: none; }
@@ -49,6 +50,7 @@
 .map-legend span { display: flex; gap: 5px; align-items: center; }
 .map-legend i { width: 10px; height: 10px; background: var(--green); border-radius: 50%; }
 .map-legend .origin-dot { background: var(--ink); }
+.map-legend .hotel-dot { background: #a5522b; }
 .transfer-list { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 .transfer-list > p { margin: 6px 0; }
 .map-note, .map-empty { color: var(--muted); font-size: 11px !important; line-height: 1.6; }
@@ -59,6 +61,10 @@
 .candidate-summary h2 { margin: 5px 0; font-size: 20px; }
 .candidate-summary p { margin: 0; color: var(--muted); font-size: 12px; }
 .candidate-summary button { flex: 0 0 auto; width: auto; }
+.booked-hotel-input { padding: 12px 0; border-top: 1px solid var(--line); }
+.booked-hotel-input .hotel-list { display: grid; gap: 10px; margin: 12px 0; }
+.booked-hotel-input .hotel-row { display: grid; grid-template-columns: .7fr 1.3fr 1.3fr .8fr .8fr auto; gap: 8px; align-items: end; padding: 10px; background: #f2f4ef; border-radius: 8px; }
+.booked-hotel-input .hotel-add { width: auto; }
 .candidate-warnings { margin: 12px 0 0; }
 .candidate-warnings p { color: var(--muted); font-size: 12px; }
 .candidate-city { padding: 22px 0; border-bottom: 1px solid var(--line); }
@@ -122,6 +128,7 @@
 .preference-checks input { width: auto; }
 
 @media (max-width: 760px) {
+  .booked-hotel-input .hotel-row { grid-template-columns: 1fr; }
   .destination-field { grid-column: auto; }
   .city-groups section > div { grid-template-columns: repeat(3, 1fr); }
   .route-map { padding: 13px; }

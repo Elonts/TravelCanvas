@@ -53,6 +53,8 @@ for (const mode of ['fixtures', 'offline']) {
     assert.ok(plan.days.flatMap(day => day.stops).every(stop => stop.navigationUrl));
     assert.equal(plan.food.summary.unresolved, 0);
     assert.equal(plan.dayGuides.length, plan.days.length);
+    assert.equal(plan.dayGuides[0].weather.provider, '高德天气');
+    assert.ok(plan.dayGuides[0].weather.queriedAt);
     assert.equal(plan.entertainmentDays.length, plan.days.length);
     assert.equal(plan.entertainmentDays[0].options.length, 0);
     assert.equal(plan.days[0].stops.some(stop => stop.kind === 'entertainment'), false);
@@ -87,19 +89,26 @@ for (const mode of ['fixtures', 'offline']) {
     assert.ok(footMassageOptions.length <= 12);
     assert.ok(footMassageOptions.every(option => option.routeMeters !== null && option.routeMeters <= 15000));
     const entertainmentId = footMassageOptions[0].id;
-    const addedEntertainment = await post('/api/plan/day', { planId: plan.planId, revision: plan.revision, dayIndex: 0, replacements: [], removedStopIds: [], entertainmentIds: [entertainmentId] });
+    const addedEntertainment = await post('/api/plan/day', { planId: plan.planId, revision: plan.revision, dayIndex: 0, replacements: [], removedStopIds: [], entertainmentSelections: [{ id: entertainmentId, period: 'afternoon' }] });
     assert.equal(addedEntertainment.status, 200, JSON.stringify(addedEntertainment.value));
     plan = addedEntertainment.value;
     assert.ok(plan.days[0].stops.some(stop => stop.kind === 'entertainment'));
-    assert.deepEqual(plan.entertainmentDays[0].selectedIds, [entertainmentId]);
+    assert.deepEqual(plan.entertainmentDays[0].selections, [{ id: entertainmentId, period: 'afternoon' }]);
+    assert.equal(plan.days[0].stops.find(stop => stop.id === entertainmentId).time, '13:30');
 
     const replacementStop = plan.days[0].stops.find(stop => stop.kind !== 'entertainment');
-    const changedDay = await post('/api/plan/day', { planId: plan.planId, revision: plan.revision, dayIndex: 0, replacements: [{ stopId: replacementStop.id, name: '雷峰塔' }], removedStopIds: [], entertainmentIds: [] });
+    const changedDay = await post('/api/plan/day', { planId: plan.planId, revision: plan.revision, dayIndex: 0, replacements: [{ stopId: replacementStop.id, name: '雷峰塔' }], removedStopIds: [], entertainmentSelections: [] });
     assert.equal(changedDay.status, 200, JSON.stringify(changedDay.value));
     plan = changedDay.value;
     assert.ok(plan.days[0].stops.some(stop => stop.name === '雷峰塔'));
     assert.equal(plan.days[0].stops.some(stop => stop.kind === 'entertainment'), false);
-    assert.deepEqual(plan.entertainmentDays[0].selectedIds, []);
+    assert.deepEqual(plan.entertainmentDays[0].selections, []);
+
+    const withHotel = await generate({ ...fixtureRequest, bookedHotels: [{ city: '杭州', name: '测试酒店', addressHint: '', checkIn: '2026-09-10', checkOut: '2026-09-11' }] });
+    assert.equal(withHotel.generated.status, 200, JSON.stringify(withHotel.generated.value));
+    assert.equal(withHotel.generated.value.days[0].endHotel.name, '测试酒店');
+    assert.ok(withHotel.generated.value.route.points.some(point => point.kind === 'hotel'));
+    assert.equal(withHotel.generated.value.dayGuides[0].hotels[0].booked, true);
 
     const multi = await generate({ ...fixtureRequest, days: 3 });
     assert.equal(multi.generated.status, 200, JSON.stringify(multi.generated.value));

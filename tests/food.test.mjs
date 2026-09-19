@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { allocateBudget, createMealSlots, evaluateRestaurant, isOpenDuring, changeMeal, summarizeFood, shortlistRestaurants } from '../lib/food.mjs';
-import { requestSchema, readJson } from '../lib/requests.mjs';
+import { requestSchema, dayReplanSchema, readJson } from '../lib/requests.mjs';
 import { PlanStore } from '../lib/plan-store.mjs';
 
 const request = requestSchema.parse({ origin: '上海', destinations: ['杭州'], startDate: '2026-09-10', days: 1, budget: 4000, travelers: 2, transport: 'walk' });
@@ -98,6 +98,13 @@ test('dinner has no fictional return leg and cars are counted per four travelers
   const result = evaluate(restaurant, dinner, { ...request, transport: 'drive', travelers: 5 }, [leg(10, 20)], null);
   assert.equal(result.extraMinutes, 10); assert.equal(result.extraFare, 40);
 });
+test('evening entertainment moves dinner early enough to finish before the activity', () => {
+  const anchoredDays = [{ ...days[0], stops: [...days[0].stops, { ...stop, id: 'fun', name: '酒馆', kind: 'entertainment', time: '19:00' }] }];
+  const dinner = createMealSlots(anchoredDays, allocateBudget(request))[1];
+  assert.equal(dinner.earliest, 1020);
+  assert.equal(dinner.latest, 1080);
+  assert.equal(dinner.next.id, 'fun');
+});
 test('swap recalculates totals without mutating snapshot; lock and unavailable target reject', () => {
   const cheaper = changeMeal(food, slot.id, 'cheaper');
   assert.equal(cheaper.meals[0].selectedId, 'r2'); assert.equal(cheaper.summary.selectedHigh, 80);
@@ -128,6 +135,11 @@ test('schema rejects impossible dates, oversized notes, forged links and missing
   assert.equal(requestSchema.safeParse({ ...request, travelers: 0 }).success, false);
   assert.equal(requestSchema.safeParse({ ...request, destinations: ['杭州', '北京'], days: 1 }).success, false);
   assert.equal(requestSchema.safeParse({ ...request, destinations: ['不存在市'] }).success, false);
+  const validHotel = { city: '杭州', name: '测试酒店', addressHint: '', checkIn: '2026-09-10', checkOut: '2026-09-11' };
+  assert.equal(requestSchema.safeParse({ ...request, bookedHotels: [validHotel] }).success, true);
+  assert.equal(requestSchema.safeParse({ ...request, bookedHotels: [{ ...validHotel, city: '北京' }] }).success, false);
+  assert.equal(requestSchema.safeParse({ ...request, days: 2, bookedHotels: [validHotel, { ...validHotel, name: '重叠酒店', checkOut: '2026-09-12' }] }).success, false);
+  assert.equal(dayReplanSchema.safeParse({ planId: '123e4567-e89b-12d3-a456-426614174000', revision: 0, dayIndex: 0, entertainmentSelections: [{ id: 'venue-1', period: 'morning' }, { id: 'venue-1', period: 'evening' }] }).success, false);
   await assert.rejects(readJson(new Request('http://localhost', { method: 'POST', body: 'x'.repeat(100) }), 10), /过长/);
 });
 

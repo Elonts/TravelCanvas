@@ -1,0 +1,3 @@
+export type VerifiedHotel = { id: string; poiId: string; city: string; name: string; addressHint: string; address: string; checkIn: string; checkOut: string; lng: number; lat: number; verified: true; navigationUrl?: string | null };
+export function attachHotelAnchors<T extends { city: string; date: string; stops: any[] }>(days: T[], hotels: VerifiedHotel[], orderStops: (stops: any[], origin: any) => any[]): (T & { startHotel: VerifiedHotel | null; endHotel: VerifiedHotel | null })[];
+export function verifyBookedHotels(request: { bookedHotels?: any[] }, map: { hotel(name: string, city: string, addressHint: string): Promise<any> } | null): Promise<VerifiedHotel[]>;

@@ -27,9 +27,11 @@ export async function fixtureFetch(input, options = {}) {
       const name = url.searchParams.get('address');
       const coordinates = { 上海: '121.4737,31.2304', 杭州: '120.1551,30.2741', 北京: '116.4074,39.9042', 成都: '104.0665,30.5723' };
       const citycodes = { 上海: '021', 杭州: '0571', 北京: '010', 成都: '028' };
-      return reply({ status: '1', geocodes: [{ formatted_address: `${name}（测试）`, location: coordinates[name] || '113.2644,23.1291', citycode: citycodes[name] || '020' }] });
+      return reply({ status: '1', geocodes: [{ formatted_address: `${name}（测试）`, location: coordinates[name] || '113.2644,23.1291', citycode: citycodes[name] || '020', adcode: name === '杭州' ? '330100' : name === '北京' ? '110100' : '310100' }] });
     }
+    if (url.pathname.includes('/weather/weatherInfo')) return reply({ status: '1', forecasts: [{ city: '杭州', adcode: url.searchParams.get('city'), reporttime: '2026-09-19 11:00:00', casts: ['2026-09-10', '2026-09-19', '2026-09-20', '2026-09-21'].map(date => ({ date, dayweather: '晴', nightweather: '多云', daytemp: '28', nighttemp: '20' })) }] });
     if (url.pathname.includes('/place/')) {
+      if (url.searchParams.get('types') === '100000') return reply({ status: '1', pois: [{ id: 'hotel-1', name: '测试酒店', address: '杭州市测试路1号', location: '120.16,30.25', typecode: '100100' }] });
       if (url.searchParams.get('types') === '050000') return reply({ status: '1', pois: Array.from({ length: 6 }, (_, i) => poi(i)) });
       if (url.searchParams.get('types') === '110000') return reply({ status: '1', pois: Array.from({ length: 12 }, (_, i) => ({
         id: `${url.searchParams.get('keywords')}-${i}`, name: i === 0 ? url.searchParams.get('keywords') : `地图补充公园${i}`, address: '杭州测试景点地址', location: `${120.1 + i * .001},30.2`, type: '风景名胜;公园广场', typecode: '110101', photos: [{ url: 'https://store.is.autonavi.com/showpic/test-attraction.jpg?v=valid' }],

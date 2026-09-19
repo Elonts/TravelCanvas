@@ -35,6 +35,14 @@ try {
       await page.locator('.advanced-planning > summary').click();
       await page.getByLabel('旅行预算（元）').fill('6000');
       await page.getByLabel('餐饮偏好').fill('杭帮菜');
+      if (mode === 'fixtures') {
+        await page.locator('.booked-hotel-input > summary').click();
+        await page.getByRole('button', { name: '添加一家已订酒店' }).click();
+        await page.getByLabel('酒店 1 名称').fill('测试酒店');
+        const checkIn = await page.getByLabel('酒店 1 入住日期').inputValue();
+        const checkOut = new Date(`${checkIn}T00:00:00Z`); checkOut.setUTCDate(checkOut.getUTCDate() + 1);
+        await page.getByLabel('酒店 1 退房日期').fill(checkOut.toISOString().slice(0, 10));
+      }
       await page.getByRole('button', { name: /开始发现地点/ }).click();
       await page.locator('.candidate-panel').waitFor({ timeout: 60000 });
       assert.equal(await page.locator('.journey-preview[data-state="discovery"]').count(), 1);
@@ -72,7 +80,9 @@ try {
         assert.ok(await page.locator('.day-guide').count() === 1);
         assert.equal(await page.locator('.sidebar .weather').count(), 0);
         assert.equal(await page.locator('.sidebar .hotels').count(), 0);
-        assert.ok(await page.getByRole('link', { name: /去携程查看酒店/ }).count() > 0);
+        assert.ok(await page.getByText('已预订酒店', { exact: true }).count() > 0);
+        assert.ok(await page.getByText('测试酒店', { exact: true }).count() > 0);
+        assert.ok(await page.locator('.map-legend').getByText('已预订酒店').count() > 0);
         assert.ok(await page.getByText(/预约提示：预约要求待确认/).count() > 0);
         assert.ok(await page.getByRole('link', { name: /在高德地图打开并导航/ }).count() >= 3);
         const firstNavigation = await page.getByRole('link', { name: /在高德地图打开并导航/ }).first().getAttribute('href');
@@ -127,6 +137,9 @@ try {
         const venueValue = await venue.locator('option').nth(1).getAttribute('value');
         assert.ok(venueValue);
         await venue.selectOption(venueValue);
+        const entertainmentPeriod = page.getByLabel('娱乐活动时间段');
+        assert.deepEqual(await entertainmentPeriod.locator('option').allTextContents(), ['上午 09:00–12:00', '下午 13:30–18:00', '晚上 19:00–23:00']);
+        await entertainmentPeriod.selectOption('afternoon');
         await page.getByRole('button', { name: '添加到当天草稿' }).click();
         await entertainmentType.selectOption({ label: '剧本杀' });
         await Promise.all([page.waitForResponse(response => response.url().includes('/api/plan/entertainment') && response.request().method() === 'POST'), page.getByRole('button', { name: '按当天路线查找地点' }).click()]);
@@ -137,6 +150,7 @@ try {
         const secondValue = secondValues.find(value => value !== venueValue);
         assert.ok(secondValue);
         await secondVenue.selectOption(secondValue);
+        await entertainmentPeriod.selectOption('morning');
         const addSecond = page.getByRole('button', { name: '添加到当天草稿' });
         assert.equal(await addSecond.isDisabled(), false);
         await addSecond.click();
@@ -148,6 +162,8 @@ try {
         assert.equal(await page.locator('.day .stop').count(), stopsBeforeEntertainment + 2);
         assert.ok((await page.locator('.day').innerText()).includes('足浴'));
         assert.ok((await page.locator('.day').innerText()).includes('剧本杀'));
+        assert.equal(await page.locator('.stop').filter({ hasText: '足浴' }).locator('time').innerText(), '13:30');
+        assert.equal(await page.locator('.stop').filter({ hasText: '剧本杀' }).locator('time').innerText(), '09:00');
       }
 
       await page.screenshot({ path: `test-artifacts/${mode}-desktop.png`, fullPage: true });
