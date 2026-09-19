@@ -16,8 +16,14 @@ try {
     try {
       await page.goto(server.base);
       assert.equal(await page.getByRole('heading', { name: '从想去，到走得通。' }).count(), 1);
+      assert.match(await page.locator('body').evaluate(element => getComputedStyle(element).backgroundImage), /aurora-mountain-lake\.png/);
+      assert.equal(await page.locator('.hero h1').evaluate(element => getComputedStyle(element).color), 'rgb(255, 253, 248)');
       assert.equal(await page.locator('.journey-preview[data-state="idle"]').count(), 1);
       assert.ok((await page.locator('.journey-preview-foot').innerText()).includes('不代表真实路线'));
+      await page.setViewportSize({ width: 390, height: 844 });
+      const mobileActionRect = await page.getByRole('button', { name: '开始发现地点' }).evaluate(element => element.getBoundingClientRect().toJSON());
+      assert.ok(mobileActionRect.top >= 0 && mobileActionRect.bottom <= 844, 'Mobile primary action must be visible in the first viewport');
+      await page.setViewportSize({ width: 1440, height: 1000 });
       await page.getByLabel('选择一个或多个目的地城市').click();
       await page.getByLabel('搜索省份或城市').fill('浙江');
       assert.equal(await page.getByText('浙江省', { exact: true }).count(), 1);

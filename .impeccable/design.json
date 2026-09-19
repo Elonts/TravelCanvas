@@ -1,9 +1,11 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-08T05:20:39.935Z",
+  "generatedAt": "2026-09-19T10:45:38.3866433Z",
   "title": "Design System: TravelCanvas",
   "extensions": {
     "colorMeta": {
+      "midnight-pine": { "role": "neutral", "displayName": "深夜松林", "canonical": "#071b19", "tonalRamp": ["#020908", "#071b19", "#12322e", "#284d47", "#4b6c65", "#78918a", "#afc0ba", "#e7efec"] },
+      "aurora-mint": { "role": "tertiary", "displayName": "极光薄荷", "canonical": "#c2ead9", "tonalRamp": ["#10241c", "#1f4033", "#365e4e", "#547d6b", "#78a08d", "#9fc5b3", "#c2ead9", "#ebf8f2"] },
       "tea-green": { "role": "primary", "displayName": "茶绿", "canonical": "#1f6255", "tonalRamp": ["#071914", "#0e2c25", "#16463b", "#1f6255", "#488174", "#77a398", "#acc9c0", "#e6f1ed"] },
       "deep-tea": { "role": "primary", "displayName": "深茶绿", "canonical": "#17483f", "tonalRamp": ["#061411", "#0d2923", "#17483f", "#32675d", "#5a887f", "#86aaa2", "#b8cec8", "#e8f1ee"] },
       "terracotta": { "role": "secondary", "displayName": "陶土色", "canonical": "#d96e4f", "tonalRamp": ["#32130b", "#5b281b", "#883d2b", "#b4543e", "#d96e4f", "#e89980", "#f2c0af", "#fbeae3"] },
@@ -26,7 +28,9 @@
       "label": { "displayName": "状态标签", "purpose": "字段标签、来源、状态和紧凑操作。" }
     },
     "shadows": [
-      { "name": "canvas-ambient", "value": "0 22px 55px rgba(23, 50, 45, .14)", "purpose": "桌面路线画布的环境阴影。" },
+      { "name": "planner-ambient", "value": "0 22px 58px rgba(1, 14, 13, .34)", "purpose": "米纸规划面从摄影夜景中分离。" },
+      { "name": "canvas-ambient", "value": "0 24px 64px rgba(1, 14, 13, .38)", "purpose": "桌面路线画布最深、最宽的环境阴影。" },
+      { "name": "stage-ambient", "value": "0 22px 58px rgba(1, 14, 13, .28)", "purpose": "候选与方案内容在背景上的次级浮起。" },
       { "name": "menu-float", "value": "0 18px 45px #18322e2e", "purpose": "城市选择菜单等临时覆盖层。" },
       { "name": "map-overlay", "value": "0 8px 28px #18322e26", "purpose": "真实地图的地点详情浮层。" },
       { "name": "sticky-action", "value": "0 10px 35px #18322e26", "purpose": "候选选择阶段的底部粘性操作条。" },
@@ -84,7 +88,7 @@
       "refersTo": "planning-panel",
       "description": "必要条件优先、高级条件渐进披露的启程面板。",
       "html": "<section class=\"ds-planner\"><h2>先定下基本行程</h2><p>必要信息在前，高级条件按需展开。</p><div class=\"ds-planner-rule\"></div><button>补充预算、偏好与餐饮要求 <span>＋</span></button></section>",
-      "css": ".ds-planner{padding:25px;background:var(--paper,#fffdf8);color:var(--ink,#17322d);border:1px solid var(--line,#d9d5c9);border-radius:13px;font-family:\"Noto Sans SC\",\"Microsoft Yahei\",sans-serif}.ds-planner h2{margin:0;font-size:22px;letter-spacing:-.02em}.ds-planner p{margin:7px 0 18px;color:var(--muted,#64746e);font-size:12px;line-height:1.6}.ds-planner-rule{border-top:1px solid var(--line,#d9d5c9)}.ds-planner button{display:flex;width:100%;align-items:center;justify-content:space-between;padding:15px 2px;border:0;background:transparent;color:var(--green-deep,#17483f);font:800 12px \"Noto Sans SC\",\"Microsoft Yahei\",sans-serif;cursor:pointer}.ds-planner button:hover{color:var(--green,#1f6255)}.ds-planner button:focus-visible{outline:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--green,#1f6255) 22%,transparent)}"
+      "css": ".ds-planner{padding:25px;background:rgba(255,253,248,.97);color:var(--ink,#17322d);border:0;border-radius:13px;box-shadow:0 22px 58px rgba(1,14,13,.34);font-family:\"Noto Sans SC\",\"Microsoft Yahei\",sans-serif}.ds-planner h2{margin:0;font-size:22px;letter-spacing:-.02em}.ds-planner p{margin:7px 0 18px;color:var(--muted,#64746e);font-size:12px;line-height:1.6}.ds-planner-rule{border-top:1px solid var(--line,#d9d5c9)}.ds-planner button{display:flex;width:100%;align-items:center;justify-content:space-between;padding:15px 2px;border:0;background:transparent;color:var(--green-deep,#17483f);font:800 12px \"Noto Sans SC\",\"Microsoft Yahei\",sans-serif;cursor:pointer}.ds-planner button:hover{color:var(--green,#1f6255)}.ds-planner button:focus-visible{outline:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--green,#1f6255) 22%,transparent)}"
     },
     {
       "name": "Journey Canvas",
@@ -92,7 +96,7 @@
       "refersTo": "journey-canvas",
       "description": "从未查询概览推进到候选点位与真实路线的签名画布。",
       "html": "<section class=\"ds-canvas\"><header><div><span>路线将在这里展开</span><h2>选择目的地</h2></div><b><i></i>等待规划</b></header><div class=\"ds-canvas-map\"><svg viewBox=\"0 0 320 220\" aria-hidden=\"true\"><path class=\"ds-water\" d=\"M190 15c70 35 58 92 17 126-35 29-20 65-75 70-40 4-67-39-42-74 23-33 15-81 100-122Z\"/><path class=\"ds-road\" d=\"M-8 62c70-22 119 31 180 7s92-21 157 3M10 154c55-35 119-3 170-6s91-38 150-32\"/></svg><div><strong>先定下出发地与目的地</strong><p>生成方案后再绘制真实道路路线。</p></div></div><footer>当前为未查询概览，不代表真实路线。</footer></section>",
-      "css": ".ds-canvas{min-height:360px;overflow:hidden;background:var(--map-land,#ece8dc);color:var(--ink,#17322d);border:1px solid #cbc7bb;border-radius:18px;box-shadow:0 22px 55px rgba(23,50,45,.14);font-family:\"Noto Sans SC\",\"Microsoft Yahei\",sans-serif}.ds-canvas header{display:flex;align-items:flex-start;justify-content:space-between;padding:22px 24px 15px;background:linear-gradient(180deg,rgba(255,253,248,.93),rgba(255,253,248,.62),transparent)}.ds-canvas header span{font-size:11px}.ds-canvas h2{margin:5px 0 0;font-size:20px}.ds-canvas header b{display:inline-flex;gap:7px;align-items:center;padding:7px 10px;border:1px solid rgba(31,98,85,.22);border-radius:999px;background:rgba(255,253,248,.75);color:var(--green-deep,#17483f);font-size:10px}.ds-canvas header i{width:6px;height:6px;border-radius:50%;background:var(--orange,#d96e4f)}.ds-canvas-map{position:relative;height:250px}.ds-canvas-map svg{width:100%;height:100%}.ds-water{fill:var(--map-water,#d9e9e3)}.ds-road{fill:none;stroke:#fffdf8;stroke-width:5;stroke-linecap:round}.ds-canvas-map div{position:absolute;top:50%;left:50%;width:75%;padding:20px;transform:translate(-50%,-50%);text-align:center;background:rgba(255,253,248,.84);border:1px solid rgba(217,213,201,.9);border-radius:14px}.ds-canvas-map p{margin:7px 0 0;color:var(--muted,#64746e);font-size:12px}.ds-canvas footer{padding:12px 22px;background:rgba(255,253,248,.82);border-top:1px solid rgba(217,213,201,.85);color:var(--muted,#64746e);font-size:10px}"
+      "css": ".ds-canvas{min-height:360px;overflow:hidden;background:var(--map-land,#ece8dc);color:var(--ink,#17322d);border:0;border-radius:18px;box-shadow:0 24px 64px rgba(1,14,13,.38);font-family:\"Noto Sans SC\",\"Microsoft Yahei\",sans-serif}.ds-canvas header{display:flex;align-items:flex-start;justify-content:space-between;padding:22px 24px 15px;background:linear-gradient(180deg,rgba(255,253,248,.93),rgba(255,253,248,.62),transparent)}.ds-canvas header span{font-size:11px}.ds-canvas h2{margin:5px 0 0;font-size:20px}.ds-canvas header b{display:inline-flex;gap:7px;align-items:center;padding:7px 10px;border:1px solid rgba(31,98,85,.22);border-radius:999px;background:rgba(255,253,248,.75);color:var(--green-deep,#17483f);font-size:10px}.ds-canvas header i{width:6px;height:6px;border-radius:50%;background:var(--orange,#d96e4f)}.ds-canvas-map{position:relative;height:250px}.ds-canvas-map svg{width:100%;height:100%}.ds-water{fill:var(--map-water,#d9e9e3)}.ds-road{fill:none;stroke:#fffdf8;stroke-width:5;stroke-linecap:round}.ds-canvas-map div{position:absolute;top:50%;left:50%;width:75%;padding:20px;transform:translate(-50%,-50%);text-align:center;background:rgba(255,253,248,.84);border:1px solid rgba(217,213,201,.9);border-radius:14px}.ds-canvas-map p{margin:7px 0 0;color:var(--muted,#64746e);font-size:12px}.ds-canvas footer{padding:12px 22px;background:rgba(255,253,248,.82);border-top:1px solid rgba(217,213,201,.85);color:var(--muted,#64746e);font-size:10px}"
     },
     {
       "name": "Candidate Card",
@@ -105,12 +109,13 @@
   ],
   "narrative": {
     "northStar": "路线先行的城市探索画布",
-    "overview": "TravelCanvas 把地图从结果附件提升为贯穿规划过程的工作画布：用户在左侧快速输入必要条件，右侧持续呈现从未查询概览、已核验候选点位到 Provider 支持路线的真实状态。界面像一张正在形成的旅行手稿，既保留暖纸、山水与定位针带来的期待感，也始终明确哪些信息已核验、哪些仍待确认。\n\n整体气质便捷、高效、可信。暖砂背景与米纸表面承载长流程，茶绿色聚焦执行与核验，陶土色只负责方向、进度和提醒；本地中文衬线标题带来编辑感，本地无衬线正文保持表单、来源和行程信息清楚可扫。系统允许信息丰富，但不演变成企业后台、指标墙或同权重卡片阵列。",
+    "overview": "TravelCanvas 把地图从结果附件提升为贯穿规划过程的工作画布：用户在左侧快速输入必要条件，右侧持续呈现从未查询概览、已核验候选点位到 Provider 支持路线的真实状态。首页以深夜松林色和极光薄荷色构成沉浸式夜景，低处的山湖照片只提供非特定地域的旅行氛围；米纸操作面浮在夜色之上，形成“先被远方吸引，再立即开始规划”的清晰节奏。\n\n整体气质沉浸、克制、可信。深色摄影背景负责情绪，米纸表面负责操作；茶绿色继续聚焦执行与核验，陶土色继续只负责方向、进度和提醒。本地中文衬线标题带来编辑感，本地无衬线正文保持表单、来源和行程信息清楚可扫。系统允许信息丰富，但不演变成旅游海报、企业后台、指标墙或同权重卡片阵列。",
     "keyCharacteristics": [
+      "深夜松林、薄荷极光与非特定山湖照片构成沉浸式首屏",
       "规划左栏与持续路线画布构成不对称主舞台",
-      "暖砂、米纸、茶绿和陶土色形成克制的自然旅行语境",
+      "米纸操作面以深而柔的阴影浮在夜景之上",
       "Noto Serif SC 标题与 Noto Sans SC 任务正文分工清晰",
-      "高级条件渐进展开，必要信息与唯一主操作优先",
+      "390 × 844 首屏完整保留五项必要输入与唯一主操作",
       "画布诚实经历概览、候选和真实路线三种状态",
       "来源、查询时间、待确认与降级说明是界面的一部分"
     ],
@@ -118,14 +123,18 @@
       { "name": "The Green Means Action Rule", "body": "茶绿色优先表示可执行、已选择或已核验，不把它稀释成大面积装饰。", "section": "colors" },
       { "name": "The Orange Guides Rule", "body": "陶土色用于方向、时间和提醒；一个视区只建立少量陶土色焦点。", "section": "colors" },
       { "name": "The Map Is Honest Rule", "body": "抽象地图色只表达画布状态；真实道路、路线和地点事实必须来自对应 Provider，或明确标为待确认。", "section": "colors" },
+      { "name": "The Atmosphere Is Not Evidence Rule", "body": "`public/images/aurora-mountain-lake.png` 是刻意非特定地域的装饰性山湖极光氛围，绝不能被描述为真实目的地、Provider 图片、搜索结果或任何事实证据。", "section": "colors" },
       { "name": "The Serif Marks the Promise Rule", "body": "Noto Serif SC 只承载首屏旅行承诺；表单、候选、地图、预算、来源与按钮全部使用 Noto Sans SC。", "section": "typography" },
       { "name": "The Local Type Rule", "body": "核心中文字体必须随应用本地交付；回退字体只负责故障容错，不定义视觉方向。", "section": "typography" },
       { "name": "The Canvas Persists Rule", "body": "需求、候选与行程改变的是画布状态，不改变画布在任务中的主位置。", "section": "layout" },
       { "name": "The Mobile Story Rule", "body": "窄屏顺序固定为规划、地图、阶段内容，让用户先行动、再看空间结果、最后处理细节。", "section": "layout" },
+      { "name": "The First-Viewport Contract", "body": "390 × 844 是移动端首屏验收基准；五项必要输入和主按钮缺一不可，不能用隐藏字段换取视觉留白。", "section": "layout" },
       { "name": "The Lift Has a Job Rule", "body": "阴影必须解释覆盖、粘性、定位或当前选择；没有交互层级就保持平整。", "section": "elevation" }
     ],
     "dos": [
       "Do 让用户先填写最少必要条件，并把唯一主操作紧邻这些条件。",
+      "Do 在桌面保持固定 `cover` 夜景构图，在移动端使用 `100svh` 裁切和文案区局部深色遮罩。",
+      "Do 把首屏摄影严格当作非特定地域的装饰氛围，把米纸面板当作可操作内容。",
       "Do 保持右侧画布在需求、候选和行程阶段持续存在，并诚实切换状态。",
       "Do 使用茶绿表达执行、选择和核验，使用陶土色表达方向、时间与提醒。",
       "Do 通过折叠、分组和响应式重排管理复杂条件，保持快速扫描。",
@@ -134,6 +143,8 @@
     ],
     "donts": [
       "Don't 在真实 Provider 数据到达前绘制连接候选点的路线或暗示道路可行性。",
+      "Don't 将极光山湖背景称为真实目的地、Provider 图片、检索结果或证据，也不要为它添加地点标签。",
+      "Don't 在 390 × 844 首屏隐藏任何一项必要输入或主按钮。",
       "Don't 把首页改造成企业后台、指标墙或同权重卡片阵列。",
       "Don't 让高级条件阻塞首次发现，也不要静默隐藏它们产生的校验问题。",
       "Don't 把茶绿用作大面积装饰，或让陶土色与主操作竞争。",

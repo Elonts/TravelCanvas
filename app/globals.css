@@ -18,11 +18,29 @@
 html { scroll-behavior: smooth; }
 
 body {
+  position: relative;
+  min-height: 100vh;
   margin: 0;
   color: var(--ink);
-  background: var(--cream);
+  background-color: #071b19;
+  background-image: url("/images/aurora-mountain-lake.png");
+  background-repeat: no-repeat;
+  background-position: center bottom;
+  background-size: cover;
+  background-attachment: fixed;
   font-family: "Noto Sans SC", "Microsoft Yahei", sans-serif;
   text-rendering: optimizeLegibility;
+}
+
+body::before {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(3, 20, 18, .34) 0%, rgba(3, 20, 18, .08) 46%, rgba(3, 20, 18, .16) 100%),
+    linear-gradient(180deg, rgba(3, 17, 16, .12) 0%, rgba(3, 17, 16, 0) 58%, rgba(3, 17, 16, .22) 100%);
+  content: "";
 }
 
 ::selection { color: #fff; background: var(--green); }
@@ -41,6 +59,8 @@ button:disabled { cursor: progress; opacity: .62; }
 a { color: inherit; }
 
 .app-shell {
+  position: relative;
+  z-index: 1;
   width: min(100%, 1480px);
   margin: 0 auto;
   padding: 18px 28px 80px;
@@ -52,15 +72,15 @@ a { color: inherit; }
   justify-content: space-between;
   min-height: 46px;
   padding-bottom: 12px;
-  color: var(--muted);
+  color: rgba(235, 246, 241, .76);
   font-size: 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border-bottom: 1px solid rgba(235, 246, 241, .22);
 }
 
 .app-header p { margin: 0; }
 
 .brand {
-  color: var(--ink);
+  color: #fffdf8;
   font-size: 15px;
   font-weight: 800;
   letter-spacing: .12em;
@@ -102,16 +122,17 @@ a { color: inherit; }
   font-family: "Noto Serif SC", Georgia, serif;
   font-size: clamp(43px, 4.45vw, 68px);
   font-weight: 600;
+  color: #fffdf8;
   line-height: 1.13;
-  letter-spacing: -.055em;
+  letter-spacing: -.04em;
 }
 
-.hero h1 em { color: var(--green); font-style: normal; }
+.hero h1 em { color: #c2ead9; font-style: normal; }
 
 .hero > p {
   max-width: 590px;
   margin: 20px 0 0;
-  color: var(--muted);
+  color: rgba(235, 246, 241, .82);
   font-size: 15px;
   line-height: 1.75;
 }
@@ -121,7 +142,7 @@ a { color: inherit; }
   flex-wrap: wrap;
   gap: 8px 18px;
   margin-top: 20px;
-  color: var(--green-deep);
+  color: rgba(244, 250, 247, .9);
   font-size: 11px;
   font-weight: 700;
 }
@@ -144,7 +165,12 @@ a { color: inherit; }
   border-radius: 13px;
 }
 
-.planner-panel { padding: 25px; }
+.planner-panel {
+  padding: 25px;
+  background: rgba(255, 253, 248, .97);
+  border: 0;
+  box-shadow: 0 22px 58px rgba(1, 14, 13, .34);
+}
 
 .section-head {
   display: flex;
@@ -268,9 +294,9 @@ legend { padding: 0 6px; font-size: 12px; font-weight: 800; }
   min-height: min(830px, calc(100vh - 92px));
   overflow: hidden;
   background: var(--map-land);
-  border: 1px solid #cbc7bb;
+  border: 0;
   border-radius: 18px;
-  box-shadow: 0 22px 55px rgba(23, 50, 45, .14);
+  box-shadow: 0 24px 64px rgba(1, 14, 13, .38);
 }
 
 .journey-preview {
@@ -393,6 +419,8 @@ legend { padding: 0 6px; font-size: 12px; font-weight: 800; }
 .journey-preview-foot {
   position: relative;
   z-index: 3;
+  grid-row: 3;
+  align-self: end;
   margin: 0;
   padding: 14px 22px;
   color: var(--muted);
@@ -407,6 +435,12 @@ legend { padding: 0 6px; font-size: 12px; font-weight: 800; }
 .journey-live .amap-container { height: clamp(480px, calc(100vh - 295px), 650px); }
 
 .stage-content > .panel, .stage-content > .result { margin-top: 0; }
+.stage-content > .result {
+  padding: 22px;
+  background: rgba(244, 240, 231, .97);
+  border-radius: 13px;
+  box-shadow: 0 22px 58px rgba(1, 14, 13, .28);
+}
 .candidate-panel { padding: 22px; }
 .result { margin: 28px 0 0; }
 
@@ -455,7 +489,31 @@ ul { padding-left: 17px; }
   .stage-content { width: min(100%, 900px); margin: 0 auto; }
 }
 
+@media (min-width: 1051px) {
+  .hero { padding: 32px 4px 20px; }
+  .hero h1 { font-size: clamp(43px, 4.15vw, 64px); line-height: 1.08; }
+  .hero > p { margin-top: 16px; line-height: 1.65; }
+  .trust-line { margin-top: 16px; }
+  .planner-panel { padding: 22px 25px; }
+  .planner-panel .section-head { margin-bottom: 18px; }
+  .planner-form { gap: 13px; }
+  .planner-form input,
+  .planner-form textarea,
+  .planner-form select,
+  .planner-form .city-select summary { padding-top: 10px; padding-bottom: 10px; }
+  .advanced-planning > summary { padding-top: 13px; padding-bottom: 13px; }
+}
+
 @media (max-width: 760px) {
+  body {
+    background-position: 58% bottom;
+    background-attachment: scroll;
+  }
+  body::before {
+    background:
+      linear-gradient(90deg, rgba(3, 20, 18, .28) 0%, rgba(3, 20, 18, .42) 100%),
+      linear-gradient(180deg, rgba(3, 20, 18, .2) 0%, rgba(3, 20, 18, .06) 58%, rgba(3, 20, 18, .28) 100%);
+  }
   .app-shell { padding: 14px 15px 60px; }
   .app-header { min-height: 43px; }
   .app-header > p:last-child { font-size: 10px; }
@@ -472,10 +530,45 @@ ul { padding-left: 17px; }
 }
 
 @media (max-width: 520px) {
+  body {
+    background-position: 61% -46svh;
+    background-size: auto 100svh;
+    background-attachment: fixed;
+  }
+  body::before {
+    background:
+      linear-gradient(90deg, rgba(3, 20, 18, .48) 0%, rgba(3, 20, 18, .34) 100%),
+      linear-gradient(180deg, rgba(3, 20, 18, .28) 0%, rgba(3, 20, 18, .08) 64%, rgba(3, 20, 18, .32) 100%);
+  }
+  .app-shell { padding: 10px 14px 48px; }
+  .app-header { min-height: 38px; padding-bottom: 8px; }
   .app-header > p:last-child { display: none; }
-  .experience-grid { gap: 20px; }
-  .quick-grid, .grid { grid-template-columns: 1fr; }
-  .quick-grid > label:first-child, .quick-grid > .destination-field { grid-column: auto; }
+  .experience-grid { gap: 16px; }
+  .hero { position: relative; isolation: isolate; padding: 20px 2px 15px; }
+  .hero::before {
+    position: absolute;
+    z-index: -1;
+    inset: -10px -14px -6px;
+    background: radial-gradient(ellipse at 15% 46%, rgba(2, 18, 16, .78) 0%, rgba(2, 18, 16, .46) 52%, transparent 78%);
+    content: "";
+  }
+  .hero h1 { font-size: clamp(34px, 10vw, 42px); line-height: 1.06; }
+  .hero > p { margin-top: 10px; font-size: 13px; line-height: 1.55; }
+  .trust-line { gap: 5px 12px; margin-top: 10px; font-size: 10px; }
+  .planner-panel { padding: 15px; }
+  .planner-panel .section-head { margin-bottom: 12px; }
+  .planner-panel .section-head h2 { font-size: 18px; }
+  .planner-panel .section-head p { margin: 4px 0 0; font-size: 11px; }
+  .planner-panel .section-head > small { display: none; }
+  .planner-form { gap: 10px; }
+  .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .quick-grid > label:first-child, .quick-grid > .destination-field { grid-column: 1 / -1; }
+  .grid { grid-template-columns: 1fr; }
+  label { gap: 4px; }
+  input, textarea, select { padding: 8px 9px; }
+  .advanced-planning > summary { padding: 10px 2px; }
+  .advanced-planning > summary small { display: none; }
+  .primary-action, .planner-form > button[type="submit"] { padding: 11px 16px; }
   .section-head { align-items: start; flex-direction: column; gap: 5px; }
   .meal-row, .hotel-row { grid-template-columns: 1fr; }
   .journey-preview, .journey-live { min-height: 470px; }
