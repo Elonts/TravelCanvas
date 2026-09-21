@@ -6,6 +6,7 @@ import type { DiscoveryCandidate, DiscoveryEvidence } from './discovery-types';
 import type { TripRequest, DataState } from './plan';
 import { amapImageAttribution, fillMissingWebImages } from './web-images.mjs';
 import { attractionPreferenceFit, foodPreferenceTerms } from './preference-fit.mjs';
+import { enrichGuideBodies, extractGuideInsights, searchTravelGuides } from './travel-guides.mjs';
 
 const suggestionSchema = z.object({
   attractions: z.array(z.object({ name: z.string().trim().min(2).max(100), reason: z.string().trim().min(2).max(240) })).max(8),
@@ -45,27 +46,40 @@ function evidenceScore(evidence: DiscoveryEvidence[], candidate: { name: string;
   return independent * 40 + recent * 8 + terms.filter(term => text.includes(term)).length * 15;
 }
 
-function makeCandidate(place: any, kind: DiscoveryCandidate['kind'], request: TripRequest, reasons: Map<string, string>, tips: Awaited<ReturnType<typeof extractTips>>, sources: Awaited<ReturnType<typeof searchNotes>>['sources']): DiscoveryCandidate {
+function guideEvidenceFor(name: string, insights: Awaited<ReturnType<typeof extractGuideInsights>>, sources: Awaited<ReturnType<typeof enrichGuideBodies>>) {
+  return insights.filter(insight => normalize(insight.placeName) === normalize(name)).map(insight => {
+    const source = sources.find(item => item.id === insight.sourceId)!;
+    return { sourceId: source.id, city: source.city, rank: source.rank, title: source.title, url: source.url, quote: insight.quote, advice: insight.advice, contentState: source.contentState, publishedAt: source.publishedAt, queriedAt: source.queriedAt };
+  }).filter(item => item.title).slice(0, 5);
+}
+
+function makeCandidate(place: any, kind: DiscoveryCandidate['kind'], request: TripRequest, reasons: Map<string, string>, tips: Awaited<ReturnType<typeof extractTips>>, sources: Awaited<ReturnType<typeof searchNotes>>['sources'], guideInsights: Awaited<ReturnType<typeof extractGuideInsights>> = [], guideSources: Awaited<ReturnType<typeof enrichGuideBodies>> = []): DiscoveryCandidate {
   const evidence = kind === 'food' ? evidenceFor(place.name, tips, sources) : [];
   const score = kind === 'food' ? evidenceScore(evidence, place, request) : 0;
+  const guideEvidence = kind === 'attraction' ? guideEvidenceFor(place.name, guideInsights, guideSources) : [];
+  const guideScore = new Set(guideEvidence.map(item => item.sourceId)).size * 30 + guideEvidence.reduce((sum, item) => sum + Math.max(0, 9 - item.rank) * 3, 0);
   const attractionFit = kind === 'attraction' ? attractionPreferenceFit(place, request) : null;
   const reason = reasons.get(normalize(place.name)) || (kind === 'food'
     ? evidence.length ? `${new Set(evidence.map(item => item.sourceId)).size} 个公开笔记线索与餐饮偏好综合排序。` : '高德餐饮候选；暂未匹配到具体小红书证据。'
-    : `根据“${request.preferences || '综合体验'}”生成，并已通过高德地点核验。`);
+    : guideEvidence.length ? `${new Set(guideEvidence.map(item => item.sourceId)).size} 篇公开攻略提及，并已通过高德地点核验。` : `根据“${request.preferences || '综合体验'}”生成，并已通过高德地点核验。`);
   const queriedAt = new Date().toISOString();
   return {
     id: `${kind}:${place.city}:${place.poiId}`, poiId: place.poiId, kind, city: place.city, name: place.name, address: place.address,
     lng: place.lng, lat: place.lat, category: place.category, imageUrl: place.imageUrl, imageAttribution: amapImageAttribution(place.imageUrl, queriedAt), durationMinutes: kind === 'attraction' ? 120 : kind === 'entertainment' ? 90 : 60,
     estimatedCost: kind === 'food' ? place.price?.high ?? null : null, price: place.price, hours: place.hours,
-    introduction: evidence[0]?.quote || `${place.category} · ${place.address || `${place.city}，详细地址待确认`}`,
-    recommendationReason: attractionFit ? `${reason} ${attractionFit.note}。` : reason, source: kind === 'food' && evidence.length ? '高德地图 POI + 小红书公开笔记' : '高德地图 POI',
+    introduction: evidence[0]?.quote || guideEvidence[0]?.quote || `${place.category} · ${place.address || `${place.city}，详细地址待确认`}`,
+    recommendationReason: attractionFit ? `${reason} ${attractionFit.note}。` : reason, source: kind === 'food' && evidence.length ? '高德地图 POI + 小红书公开笔记' : kind === 'attraction' && guideEvidence.length ? '高德地图 POI + 公开小红书攻略' : '高德地图 POI',
     queriedAt, verified: true, navigationUrl: place.navigationUrl, evidence, evidenceScore: score, featuredDishes: [...new Set(evidence.flatMap(item => item.dishes || []))],
-    preferenceFitScore: attractionFit?.score, constraintWarning: attractionFit?.caution || undefined,
+    guideEvidence, guideScore, preferenceFitScore: attractionFit?.score, constraintWarning: attractionFit?.caution || undefined,
   };
 }
 
 export async function discoverCandidates(request: TripRequest) {
   const warnings: string[] = [];
+  const guideSearches = await Promise.all(request.destinations.map(city => searchTravelGuides(city)));
+  guideSearches.forEach((search, index) => { if (search.warning) warnings.push(`${request.destinations[index]}攻略：${search.warning}`); });
+  const guideSources = await enrichGuideBodies(guideSearches.flatMap(search => search.sources));
+  const guideInsights = await extractGuideInsights(guideSources);
   const searches = await Promise.all(request.destinations.map(async city => {
     const result = await searchNotes({ ...request, destinations: [city] }, []);
     return { city, ...result, sources: result.sources.map(source => ({ ...source, id: `${city}:${source.id}` })) };
@@ -80,6 +94,10 @@ export async function discoverCandidates(request: TripRequest) {
   const mapStates: DataState[] = [];
   for (let index = 0; index < request.destinations.length; index++) {
     const city = request.destinations[index], suggestion = suggestions[index].value;
+    const cityGuideSources = guideSources.filter(source => source.city === city);
+    const cityGuideIds = new Set(cityGuideSources.map(source => source.id));
+    const cityGuideInsights = guideInsights.filter(insight => cityGuideIds.has(insight.sourceId));
+    const guideNames = [...new Set(cityGuideInsights.sort((a, b) => (cityGuideSources.find(source => source.id === a.sourceId)?.rank || 9) - (cityGuideSources.find(source => source.id === b.sourceId)?.rank || 9)).map(insight => insight.placeName))];
     const citySourceIds = new Set(searches[index].sources.map(source => source.id));
     const cityTips = tips.filter(tip => citySourceIds.has(tip.sourceId));
     const foodNames = cityTips.filter(tip => tip.category === 'food' || tip.category === 'ranking').map(tip => tip.placeName);
@@ -87,7 +105,7 @@ export async function discoverCandidates(request: TripRequest) {
     const reasons = new Map(suggestion.attractions.map(item => [normalize(item.name), item.reason]));
     if (!map) { mapStates.push('pending'); continue; }
     const [attractions, food] = await Promise.all([
-      map.discover(city, 'attraction', suggestion.attractions.map(item => item.name), Math.min(20, Math.max(6, request.days * 3 + 3)), request.transport),
+      map.discover(city, 'attraction', [...guideNames.slice(0, 6), ...suggestion.attractions.map(item => item.name)], Math.min(20, Math.max(6, request.days * 3 + 3)), request.transport),
       map.discover(city, 'food', [...foodTerms.slice(0, 4), ...foodNames.slice(0, 4)], 10, request.transport),
     ]);
     const targetedSearch = food.length ? await searchNotes({ ...request, destinations: [city], verifiedFoodNames: food.map(place => place.name) }, []) : { sources: [], warnings: [], state: 'pending' as const };
@@ -99,7 +117,7 @@ export async function discoverCandidates(request: TripRequest) {
     const targetedTips = await extractTips(targetedSources, food.map(place => place.name));
     const literalFoodTips = await extractTips([...searches[index].sources, ...targetedSources], food.map(place => place.name), {} as NodeJS.ProcessEnv, fetch);
     const verifiedTips = [...cityTips, ...targetedTips, ...literalFoodTips].filter((tip, tipIndex, all) => all.findIndex(other => other.sourceId === tip.sourceId && other.quote === tip.quote) === tipIndex);
-    const rankedAttractions = attractions.map(place => makeCandidate(place, 'attraction', request, reasons, cityTips, sources)).filter(candidate => !attractionPreferenceFit(candidate, request).excluded).sort((a, b) => (b.preferenceFitScore || 0) - (a.preferenceFitScore || 0));
+    const rankedAttractions = attractions.map(place => makeCandidate(place, 'attraction', request, reasons, cityTips, sources, cityGuideInsights, cityGuideSources)).filter(candidate => !attractionPreferenceFit(candidate, request).excluded).sort((a, b) => b.guideScore - a.guideScore || (b.preferenceFitScore || 0) - (a.preferenceFitScore || 0));
     candidates.push(...rankedAttractions);
     candidates.push(...food.map(place => makeCandidate(place, 'food', request, reasons, verifiedTips, sources)).sort((a, b) => b.evidenceScore - a.evidenceScore));
     mapStates.push(attractions.length && food.length ? 'live' : 'pending');
@@ -108,7 +126,8 @@ export async function discoverCandidates(request: TripRequest) {
   const picturedCandidates = await fillMissingWebImages(candidates, process.env, fetch);
   return {
     request, candidates: picturedCandidates, warnings,
-    sources: { search: searches.every(search => search.state === 'live') ? 'live' as const : 'pending' as const, ai: stateOf(suggestions.map(item => item.state)), map: stateOf(mapStates), updatedAt: new Date().toISOString() },
+    guideSources: guideSources.map(({ content: _content, ...source }) => source),
+    sources: { search: searches.every(search => search.state === 'live') ? 'live' as const : 'pending' as const, guides: guideSearches.every(search => search.state === 'live') ? 'live' as const : 'pending' as const, ai: stateOf(suggestions.map(item => item.state)), map: stateOf(mapStates), updatedAt: new Date().toISOString() },
   };
 }
 

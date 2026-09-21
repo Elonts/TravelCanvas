@@ -31,6 +31,13 @@ for (const mode of ['fixtures', 'offline']) {
     }
 
     assert.ok(initial.found.value.candidates.some(candidate => candidate.kind === 'attraction'));
+    assert.equal(initial.found.value.guideSources.length, 8);
+    assert.ok(initial.found.value.guideSources.every((source, index) => source.rank === index + 1 && source.contentState === 'summary' && !('content' in source)));
+    assert.equal(initial.found.value.sources.guides, 'live');
+    assert.ok(initial.found.value.candidates.some(candidate => candidate.kind === 'attraction' && candidate.guideEvidence.length && candidate.guideScore > 0));
+    const guideRankedAttractions = initial.found.value.candidates.filter(candidate => candidate.kind === 'attraction');
+    assert.equal(guideRankedAttractions[0].name, '西湖风景名胜区');
+    assert.ok(guideRankedAttractions[0].guideScore > guideRankedAttractions[1].guideScore);
     assert.ok(initial.found.value.candidates.some(candidate => candidate.kind === 'food' && candidate.evidence.length));
     assert.ok(initial.found.value.candidates.every(candidate => candidate.kind !== 'entertainment'));
     assert.ok(initial.found.value.candidates.every(candidate => candidate.navigationUrl.startsWith('https://uri.amap.com/navigation')));
@@ -49,6 +56,7 @@ for (const mode of ['fixtures', 'offline']) {
     assert.ok(customFood.value.candidates.some(candidate => candidate.name === '测试江南餐厅（西湖店）' && candidate.kind === 'food'));
     assert.equal(initial.generated.status, 200, JSON.stringify(initial.generated.value));
     let plan = initial.generated.value;
+    assert.equal(plan.guides.length, 8);
     assert.equal(plan.food.meals.length, 2); assert.ok(plan.planId);
     assert.ok(plan.days.flatMap(day => day.stops).every(stop => stop.navigationUrl));
     assert.equal(plan.food.summary.unresolved, 0);

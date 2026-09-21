@@ -66,6 +66,8 @@ try {
         assert.ok(await page.locator('.candidate-image img').count() >= 3);
         await page.waitForFunction(() => [...document.querySelectorAll('.candidate-image img')].slice(0, 3).every(image => image.complete && image.naturalWidth > 0));
         assert.ok(await page.getByText(/小红书公开笔记证据/).count() > 0);
+        assert.equal(await page.getByText(/公开搜索相关性前 8 篇/).count(), 1);
+        assert.ok(await page.getByText(/旅游攻略原文证据/).count() > 0);
         await page.getByRole('button', { name: /用已选地点生成路线/ }).click();
         await page.locator('.result').waitFor({ timeout: 60000 });
         await page.getByText('已收起候选地点').waitFor();
@@ -78,6 +80,7 @@ try {
         if (await page.locator('.map-fallback').count()) assert.ok((await page.locator('.map-fallback').innerText()).includes('地图'));
         assert.equal(await page.locator('.day-tabs button').count(), 1);
         assert.ok(await page.locator('.day-guide').count() === 1);
+        assert.equal(await page.getByText(/景点排序参考的公开攻略/).count(), 1);
         assert.equal(await page.locator('.sidebar .weather').count(), 0);
         assert.equal(await page.locator('.sidebar .hotels').count(), 0);
         assert.ok(await page.getByText('已预订酒店', { exact: true }).count() > 0);
