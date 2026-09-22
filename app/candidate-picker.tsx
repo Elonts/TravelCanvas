@@ -11,21 +11,20 @@ const stamp = (value: string) => new Date(value).toLocaleString('zh-CN');
 export function CandidatePicker({ discovery, selectedIds, busy, error, onToggle, onGenerate, onAddCustom }: {
   discovery: DiscoveryResult; selectedIds: string[]; busy: boolean; error: string;
   onToggle: (id: string) => void; onGenerate: () => void;
-  onAddCustom: (city: string, kind: 'attraction' | 'food', names: string[]) => Promise<void>;
+  onAddCustom: (city: string, kind: 'attraction', names: string[]) => Promise<void>;
 }) {
   const [custom, setCustom] = useState<Record<string, string>>({});
   const [customError, setCustomError] = useState<Record<string, string>>({});
   const selected = new Set(selectedIds);
   const missingCities = discovery.request.destinations.filter(city => !discovery.candidates.some(candidate => candidate.city === city && candidate.kind !== 'food' && selected.has(candidate.id)));
-  const chosenFood = discovery.candidates.filter(candidate => candidate.kind === 'food' && selected.has(candidate.id)).length;
   return <section className="candidate-panel panel">
     <div className="section-head"><div><span className="eyebrow">02 / 选择想去的地方</span><h2>先挑喜欢的，再安排路线</h2></div><small>候选保留到 {new Date(discovery.expiresAt).toLocaleTimeString('zh-CN')}</small></div>
-    <div className="notice">候选来源：AI {discovery.sources.ai === 'live' ? '建议已生成' : '使用降级候选'} · 高德 {discovery.sources.map === 'live' ? '地点已核验' : '部分待确认'} · 旅游攻略 {discovery.sources.guides === 'live' ? '已查询' : '待确认'} · 美食笔记 {discovery.sources.search === 'live' ? '已查询' : '待确认'}。AI 推荐和帖子经验均不是已验证事实。</div>
-    {!!discovery.guideSources.length && <details className="candidate-warnings guide-sources"><summary>公开搜索相关性前 8 篇（各目的地）</summary>{discovery.guideSources.map(source => <p key={source.id}><b>{source.city} · 第 {source.rank} 篇</b> · <a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a> · {source.contentState === 'full' ? '公开正文' : '搜索摘要'} · 查询 {stamp(source.queriedAt)}</p>)}</details>}
+    <div className="notice">景区来源：AI {discovery.sources.ai === 'live' ? '建议已生成' : '使用降级候选'} · 高德 {discovery.sources.map === 'live' ? '地点已核验' : '部分待确认'} · 公开小红书攻略 {discovery.sources.guides === 'live' ? '已按目的地与偏好筛选' : '待确认'}。餐厅会在基础路线生成后再顺路查询。</div>
+    {!!discovery.guideSources.length && <details className="candidate-warnings guide-sources"><summary>公开攻略综合推荐来源（各目的地最多 8 篇）</summary>{discovery.guideSources.map(source => <p key={source.id}><b>{source.city} · 相关性第 {source.rank} 篇</b> · <a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a> · {source.contentState === 'full' ? '公开正文' : '搜索摘要'} · 查询 {stamp(source.queriedAt)}</p>)}</details>}
     {!!discovery.warnings.length && <details className="candidate-warnings"><summary>查看数据提示（{discovery.warnings.length}）</summary>{discovery.warnings.map(warning => <p key={warning}>{warning}</p>)}</details>}
     {discovery.request.destinations.map(city => <section className="candidate-city" key={city}>
       <h3>{city}</h3>
-      {(['attraction', 'food'] as const).map(kind => {
+      {(['attraction'] as const).map(kind => {
         const items = discovery.candidates.filter(candidate => candidate.city === city && candidate.kind === kind);
         return <div className="candidate-category" key={kind}><div className="candidate-category-title"><b>{labels[kind]}</b><span>{items.length} 个候选</span></div>
           {items.length ? <div className="candidate-grid">{items.map(candidate => <CandidateCard key={candidate.id} candidate={candidate} checked={selected.has(candidate.id)} onToggle={onToggle} />)}</div> : <p className="candidate-empty">暂无已核验的{labels[kind]}候选。</p>}
@@ -39,7 +38,7 @@ export function CandidatePicker({ discovery, selectedIds, busy, error, onToggle,
         </div>;
       })}
     </section>)}
-    <div className="selection-bar"><div><b>已选择 {selectedIds.length} 个地点</b><p>{missingCities.length ? `还需为 ${missingCities.join('、')} 选择至少一个景区。` : `路线基础已满足${chosenFood ? `，其中 ${chosenFood} 家餐厅会优先参与餐次筛选` : '；建议再选择感兴趣的餐厅' }。`}</p></div><button type="button" disabled={busy || !!missingCities.length || !selectedIds.length} onClick={onGenerate}>{busy ? '正在校验并生成路线…' : '用已选地点生成路线 →'}</button></div>
+    <div className="selection-bar"><div><b>已选择 {selectedIds.length} 个景区</b><p>{missingCities.length ? `还需为 ${missingCities.join('、')} 选择至少一个景区。` : '将先生成酒店、站点与景区基础路线，再沿路线查询午晚餐。'}</p></div><button type="button" disabled={busy || !!missingCities.length || !selectedIds.length} onClick={onGenerate}>{busy ? '正在生成基础路线并顺路找美食…' : '生成基础路线并顺路找美食 →'}</button></div>
     {error && <p className="error" role="alert">{error}</p>}
   </section>;
 }

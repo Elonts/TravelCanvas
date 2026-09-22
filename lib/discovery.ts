@@ -76,17 +76,12 @@ function makeCandidate(place: any, kind: DiscoveryCandidate['kind'], request: Tr
 
 export async function discoverCandidates(request: TripRequest) {
   const warnings: string[] = [];
-  const guideSearches = await Promise.all(request.destinations.map(city => searchTravelGuides(city)));
+  const guideSearches = await Promise.all(request.destinations.map(city => searchTravelGuides(city, request.preferences, request.constraints)));
   guideSearches.forEach((search, index) => { if (search.warning) warnings.push(`${request.destinations[index]}攻略：${search.warning}`); });
   const guideSources = await enrichGuideBodies(guideSearches.flatMap(search => search.sources));
   const guideInsights = await extractGuideInsights(guideSources);
-  const searches = await Promise.all(request.destinations.map(async city => {
-    const result = await searchNotes({ ...request, destinations: [city] }, []);
-    return { city, ...result, sources: result.sources.map(source => ({ ...source, id: `${city}:${source.id}` })) };
-  }));
-  const sources = searches.flatMap(search => search.sources);
-  searches.forEach(search => warnings.push(...search.warnings.map(warning => `${search.city}：${warning}`)));
-  const tips = await extractTips(sources, []);
+  const sources: Awaited<ReturnType<typeof searchNotes>>['sources'] = [];
+  const tips: Awaited<ReturnType<typeof extractTips>> = [];
   const suggestions = await Promise.all(request.destinations.map(city => aiSuggestions(request, city)));
   const map = process.env.AMAP_API_KEY ? createMapProvider(process.env, fetch, { intervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400 }) : null;
   if (!map) warnings.push('高德服务未配置，无法核验候选地点、图片和导航坐标。');
@@ -98,36 +93,20 @@ export async function discoverCandidates(request: TripRequest) {
     const cityGuideIds = new Set(cityGuideSources.map(source => source.id));
     const cityGuideInsights = guideInsights.filter(insight => cityGuideIds.has(insight.sourceId));
     const guideNames = [...new Set(cityGuideInsights.sort((a, b) => (cityGuideSources.find(source => source.id === a.sourceId)?.rank || 9) - (cityGuideSources.find(source => source.id === b.sourceId)?.rank || 9)).map(insight => insight.placeName))];
-    const citySourceIds = new Set(searches[index].sources.map(source => source.id));
-    const cityTips = tips.filter(tip => citySourceIds.has(tip.sourceId));
-    const foodNames = cityTips.filter(tip => tip.category === 'food' || tip.category === 'ranking').map(tip => tip.placeName);
-    const foodTerms = foodPreferenceTerms(request.foodPreferences || '');
+    const cityTips: Awaited<ReturnType<typeof extractTips>> = [];
     const reasons = new Map(suggestion.attractions.map(item => [normalize(item.name), item.reason]));
     if (!map) { mapStates.push('pending'); continue; }
-    const [attractions, food] = await Promise.all([
-      map.discover(city, 'attraction', [...guideNames.slice(0, 6), ...suggestion.attractions.map(item => item.name)], Math.min(20, Math.max(6, request.days * 3 + 3)), request.transport),
-      map.discover(city, 'food', [...foodTerms.slice(0, 4), ...foodNames.slice(0, 4)], 10, request.transport),
-    ]);
-    const targetedSearch = food.length ? await searchNotes({ ...request, destinations: [city], verifiedFoodNames: food.map(place => place.name) }, []) : { sources: [], warnings: [], state: 'pending' as const };
-    const targetedSources = targetedSearch.sources.map(source => ({ ...source, id: `${city}:targeted:${source.id}` }));
-    sources.push(...targetedSources);
-    warnings.push(...targetedSearch.warnings.map(warning => `${city}精准分店检索：${warning}`));
-    // If the model extractor is unavailable, exact full branch names from the
-    // already verified AMap pool can still recover literal source excerpts.
-    const targetedTips = await extractTips(targetedSources, food.map(place => place.name));
-    const literalFoodTips = await extractTips([...searches[index].sources, ...targetedSources], food.map(place => place.name), {} as NodeJS.ProcessEnv, fetch);
-    const verifiedTips = [...cityTips, ...targetedTips, ...literalFoodTips].filter((tip, tipIndex, all) => all.findIndex(other => other.sourceId === tip.sourceId && other.quote === tip.quote) === tipIndex);
+    const attractions = await map.discover(city, 'attraction', [...guideNames.slice(0, 6), ...suggestion.attractions.map(item => item.name)], Math.min(20, Math.max(6, request.days * 3 + 3)), request.transport);
     const rankedAttractions = attractions.map(place => makeCandidate(place, 'attraction', request, reasons, cityTips, sources, cityGuideInsights, cityGuideSources)).filter(candidate => !attractionPreferenceFit(candidate, request).excluded).sort((a, b) => b.guideScore - a.guideScore || (b.preferenceFitScore || 0) - (a.preferenceFitScore || 0));
     candidates.push(...rankedAttractions);
-    candidates.push(...food.map(place => makeCandidate(place, 'food', request, reasons, verifiedTips, sources)).sort((a, b) => b.evidenceScore - a.evidenceScore));
-    mapStates.push(attractions.length && food.length ? 'live' : 'pending');
+    mapStates.push(attractions.length ? 'live' : 'pending');
   }
-  if (!candidates.some(candidate => candidate.kind === 'food' && candidate.evidence.length)) warnings.push('本次没有匹配到带具体小红书证据的分店；无证据餐厅仅作为高德候选展示。');
+  warnings.push('餐厅将在景区基础路线生成后，按午晚餐位置、口味和绕路成本查询。');
   const picturedCandidates = await fillMissingWebImages(candidates, process.env, fetch);
   return {
     request, candidates: picturedCandidates, warnings,
     guideSources: guideSources.map(({ content: _content, ...source }) => source),
-    sources: { search: searches.every(search => search.state === 'live') ? 'live' as const : 'pending' as const, guides: guideSearches.every(search => search.state === 'live') ? 'live' as const : 'pending' as const, ai: stateOf(suggestions.map(item => item.state)), map: stateOf(mapStates), updatedAt: new Date().toISOString() },
+    sources: { search: 'pending' as const, guides: guideSearches.every(search => search.state === 'live') ? 'live' as const : 'pending' as const, ai: stateOf(suggestions.map(item => item.state)), map: stateOf(mapStates), updatedAt: new Date().toISOString() },
   };
 }
 

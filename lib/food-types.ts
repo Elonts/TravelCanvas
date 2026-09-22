@@ -12,6 +12,7 @@ export type Restaurant = {
   category: string; price: { low: number; high: number } | null;
   hours: string; hoursDate?: string | null; source: string; queriedAt: string; tips: EvidenceTip[];
   city?: string; preferred?: boolean; imageUrl?: string | null; navigationUrl?: string | null;
+  preferredMealId?: string;
   imageAttribution?: import('./web-images.mjs').ImageAttribution | null;
   featuredDishes?: string[];
 };

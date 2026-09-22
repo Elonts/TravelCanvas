@@ -1,10 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import type { Plan } from '../lib/plan';
 import type { EvidenceTip, FoodPlan, Meal, MealOption } from '../lib/food-types';
 import { clockTime } from '../lib/food.mjs';
+import { parsePlaceNames } from '../lib/place-input.mjs';
 
 export type MealAction = (mealId: string, action: 'lock' | 'cheaper' | 'closer' | 'select' | 'selectAndLock', restaurantId?: string) => void;
+export type RestaurantSearchAction = (mealId: string, names: string[]) => Promise<void>;
 const stamp = (value: string) => new Date(value).toLocaleString('zh-CN');
 
 export function SourceTip({ tip, food }: { tip: EvidenceTip; food: FoodPlan }) {
@@ -47,7 +50,9 @@ function RestaurantOption({ option, food, label, children }: { option: MealOptio
   </div>;
 }
 
-export function MealCard({ meal, food, busy, onAction }: { meal: Meal; food: FoodPlan; busy: boolean; onAction: MealAction }) {
+export function MealCard({ meal, food, busy, onAction, onSearch }: { meal: Meal; food: FoodPlan; busy: boolean; onAction: MealAction; onSearch: RestaurantSearchAction }) {
+  const [customNames, setCustomNames] = useState('');
+  const parsedNames = parsePlaceNames(customNames).slice(0, 8);
   const selected = meal.options.find(o => o.restaurant.id === meal.selectedId);
   const used = new Set(food.meals.filter(m => m.slot.id !== meal.slot.id).map(m => m.selectedId));
   const alternatives = meal.options.filter(o => o.eligible && o.restaurant.id !== meal.selectedId && !used.has(o.restaurant.id)).slice(0, 2);
@@ -67,6 +72,7 @@ export function MealCard({ meal, food, busy, onAction }: { meal: Meal; food: Foo
     {visibleSuggestions.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label={option.reasons.length ? '具体门店 · 当前条件不匹配' : '具体门店建议 · 需确认后安排'}>{option.canAcceptPending && <div className="confirmation-actions"><button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'selectAndLock', option.restaurant.id)}>了解提示，仍要选择并锁定</button></div>}</RestaurantOption>)}
     {!!alternatives.length && <details className="alternatives"><summary>备选餐厅（{alternatives.length}）</summary>{alternatives.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label="可选替代"><button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'select', option.restaurant.id)}>选择这家并重算</button></RestaurantOption>)}</details>}
     {!!remainingPending.length && <details className="alternatives"><summary>查看其他待确认或不符合条件的候选（{remainingPending.length}）</summary>{remainingPending.map(option => <RestaurantOption key={option.restaurant.id} option={option} food={food} label="未入选候选">{option.canAcceptPending ? <div className="confirmation-actions"><button type="button" disabled={busy || meal.locked} onClick={() => onAction(meal.slot.id, 'selectAndLock', option.restaurant.id)}>了解提示，仍要选择并锁定</button></div> : <p className="constraint-note">存在明确饮食禁忌冲突，不能强制安排。</p>}</RestaurantOption>)}</details>}
+    <div className="custom-restaurant-search"><label>想指定其他餐厅？<textarea rows={2} value={customNames} onChange={event => setCustomNames(event.target.value)} placeholder="输入完整店名或分店名，多个用顿号隔开" /></label><div><small>系统会先核验具体分店，再计算插入当前餐次后的绕路、时间和预算。</small><button type="button" className="secondary" disabled={busy || !parsedNames.length} onClick={async () => { await onSearch(meal.slot.id, parsedNames); setCustomNames(''); }}>核验并重新计算{parsedNames.length ? `（${parsedNames.length}）` : ''}</button></div></div>
   </section>;
 }
 

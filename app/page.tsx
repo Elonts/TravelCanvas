@@ -2,7 +2,7 @@
 
 import { FormEvent, Fragment, useEffect, useState } from 'react';
 import type { EntertainmentPeriod, EntertainmentSelection, Plan } from '../lib/plan';
-import { FoodSummary, MealCard, SourceTip, type MealAction } from './food-view';
+import { FoodSummary, MealCard, SourceTip, type MealAction, type RestaurantSearchAction } from './food-view';
 import { CityMultiSelect } from './city-multi-select';
 import { JourneyCanvas } from './journey-canvas';
 import { CandidatePicker } from './candidate-picker';
@@ -66,7 +66,7 @@ export default function Home() {
     } catch (e) { setError(userFacingRequestError(e, '路线生成失败')); } finally { setLoading(false); }
   };
   const toggleCandidate = (id: string) => setSelectedIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
-  const addCustomCandidates = async (city: string, kind: 'attraction' | 'food', names: string[]) => {
+  const addCustomCandidates = async (city: string, kind: 'attraction', names: string[]) => {
     if (!discovery || loading) return;
     setLoading(true);
     try {
@@ -84,6 +84,14 @@ export default function Home() {
       const response = await fetch('/api/food', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, mealId, action, restaurantId }) });
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
     } catch (e) { setChangeError(userFacingRequestError(e, '调整失败')); } finally { setChanging(false); }
+  };
+  const searchRestaurants: RestaurantSearchAction = async (mealId, names) => {
+    if (!plan || changing || loading) return;
+    setChanging(true); setChangeError('');
+    try {
+      const response = await fetch('/api/plan/restaurants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, mealId, names }) });
+      const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
+    } catch (e) { setChangeError(userFacingRequestError(e, '餐厅查询失败')); } finally { setChanging(false); }
   };
   const searchEntertainment = async (dayIndex: number, preference: string, query: string, selectedIds: string[]) => {
     if (!plan?.planId || plan.revision === undefined || changing || loading) return;
@@ -157,14 +165,14 @@ export default function Home() {
       {(discovery || plan) && <div className="stage-content">
         {discovery && (candidateExpanded
           ? <CandidatePicker discovery={discovery} selectedIds={selectedIds} busy={loading} error={plan ? '' : error} onToggle={toggleCandidate} onGenerate={generatePlan} onAddCustom={addCustomCandidates} />
-          : <section className="candidate-summary panel"><div><span className="eyebrow">02 / 选择想去的地方</span><h2>已收起候选地点</h2><p>已选 {discovery.candidates.filter(candidate => selectedIds.includes(candidate.id) && candidate.kind === 'attraction').length} 个景区、{discovery.candidates.filter(candidate => selectedIds.includes(candidate.id) && candidate.kind === 'food').length} 家餐厅。展开修改后需重新生成路线才会生效。</p></div><button type="button" className="secondary" onClick={() => setCandidateExpanded(true)}>展开并修改选择</button></section>)}
-        {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} onSearchEntertainment={searchEntertainment} onReplanDay={replanDay} changeError={changeError} />}
+          : <section className="candidate-summary panel"><div><span className="eyebrow">02 / 选择想去的地方</span><h2>已收起景区候选</h2><p>已选 {discovery.candidates.filter(candidate => selectedIds.includes(candidate.id) && candidate.kind === 'attraction').length} 个景区。餐厅已按生成后的基础路线另行查询；展开修改景区后需重新生成路线。</p></div><button type="button" className="secondary" onClick={() => setCandidateExpanded(true)}>展开并修改选择</button></section>)}
+        {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} onSearchRestaurants={searchRestaurants} onSearchEntertainment={searchEntertainment} onReplanDay={replanDay} changeError={changeError} />}
       </div>}
     </section>
   </main>;
 }
 
-function PlanView({ plan, busy, onAction, onSearchEntertainment, onReplanDay, changeError }: { plan: Plan; busy: boolean; onAction: MealAction; onSearchEntertainment: (dayIndex: number, preference: string, query: string, selectedIds: string[]) => Promise<void>; onReplanDay: (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentSelections: EntertainmentSelection[]) => Promise<void>; changeError: string }) {
+function PlanView({ plan, busy, onAction, onSearchRestaurants, onSearchEntertainment, onReplanDay, changeError }: { plan: Plan; busy: boolean; onAction: MealAction; onSearchRestaurants: RestaurantSearchAction; onSearchEntertainment: (dayIndex: number, preference: string, query: string, selectedIds: string[]) => Promise<void>; onReplanDay: (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentSelections: EntertainmentSelection[]) => Promise<void>; changeError: string }) {
   const [activeDay, setActiveDay] = useState(0);
   const [replacementNames, setReplacementNames] = useState<Record<string, string>>({});
   const [entertainmentSelections, setEntertainmentSelections] = useState<Record<number, EntertainmentSelection[]>>({});
@@ -215,7 +223,7 @@ function PlanView({ plan, busy, onAction, onSearchEntertainment, onReplanDay, ch
           {stop.navigationUrl && <a className="nav-link" href={stop.navigationUrl} target="_blank" rel="noreferrer">在高德地图打开并导航 →</a>}
           {plan.food.tips.filter(tip => tip.placeName === stop.name).map(tip => <SourceTip key={tip.id} tip={tip} food={plan.food} />)}
         </div><b>{stop.costPending ? '费用待确认' : `约 ¥${stop.cost}`}</b></div>
-        {plan.food.meals.filter(meal => meal.slot.dayIndex === dayIndex && meal.slot.previous.id === stop.id).map(meal => <MealCard key={meal.slot.id} meal={meal} food={plan.food} busy={busy} onAction={onAction} />)}
+        {plan.food.meals.filter(meal => meal.slot.dayIndex === dayIndex && meal.slot.previous.id === stop.id).map(meal => <MealCard key={meal.slot.id} meal={meal} food={plan.food} busy={busy} onAction={onAction} onSearch={onSearchRestaurants} />)}
       </Fragment>)}
       <div className="day-editor"><span className="eyebrow">顺路娱乐活动</span><p>先选择想玩的类型，再查找距当天路线 15 公里以内的具体地点。默认安排 1 个，也可继续添加，最多 3 个。</p>
         <div className="entertainment-search"><label>娱乐项目<select aria-label="娱乐项目" value={entertainmentType} onChange={event => { setEntertainmentTypes(current => ({ ...current, [activeDay]: event.target.value })); setEntertainmentQueries(current => ({ ...current, [activeDay]: '' })); setVenueChoices(current => ({ ...current, [activeDay]: '' })); }}>{ENTERTAINMENT_TYPES.map(item => <option key={item}>{item}</option>)}<option value="其他">其他</option></select></label><label>{entertainmentType === '其他' ? '具体活动类型（必填）' : '希望在哪个区域或哪家店（可选）'}<input aria-label={entertainmentType === '其他' ? '具体活动类型（必填）' : '希望在哪个区域或哪家店（可选）'} value={entertainmentQuery} onChange={event => setEntertainmentQueries(current => ({ ...current, [activeDay]: event.target.value }))} maxLength={100} placeholder={entertainmentType === '其他' ? '如：密室逃脱、Livehouse、电玩城' : '如：西湖附近、某家酒馆'} /></label><button className="secondary" type="button" disabled={busy || (entertainmentType === '其他' && entertainmentQuery.trim().length < 2)} onClick={() => onSearchEntertainment(activeDay, entertainmentType, entertainmentQuery.trim(), entertainmentIds)}>{busy ? '正在查询…' : '按当天路线查找地点'}</button></div>

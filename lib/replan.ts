@@ -12,7 +12,7 @@ import { ENTERTAINMENT_RADIUS_METERS, ENTERTAINMENT_TYPES } from './entertainmen
 import { scheduleDay } from './day-schedule.mjs';
 
 const normalize = (value: string) => value.replace(/[\s（）()·]/g, '').toLowerCase();
-const rebuildFoodPlan = buildFoodPlan as unknown as (request: Plan['request'], days: Plan['days'], budget: Plan['budget'], env: NodeJS.ProcessEnv, fetcher: typeof fetch, options: { mapIntervalMs: number; preferredRestaurants: Restaurant[]; discoverySources: FoodPlan['sources'] }) => Promise<FoodPlan>;
+const rebuildFoodPlan = buildFoodPlan as unknown as (request: Plan['request'], days: Plan['days'], budget: Plan['budget'], env: NodeJS.ProcessEnv, fetcher: typeof fetch, options: { mapIntervalMs: number; preferredRestaurants: Restaurant[]; discoverySources: FoodPlan['sources'] | null }) => Promise<FoodPlan>;
 
 function asAttraction(candidate: any, old: Stop, queriedAt: string): Stop {
   return {
@@ -28,10 +28,31 @@ async function routePaths(plan: Plan, points: Plan['route']['points'], map: Retu
   for (let index = 1; index < points.length; index++) {
     const from = points[index - 1], to = points[index];
     if (from.date !== to.date && from.kind !== 'origin') continue;
+    if (from.kind === 'origin' && (to.kind === 'station' || to.kind === 'airport')) continue;
     const leg = await map.route(from, to, plan.request.transport, from.city, to.city);
     paths.push({ ...leg, fromId: from.id, toId: to.id, date: to.date, transport: plan.request.transport });
   }
   return paths;
+}
+
+export async function addRestaurantCandidates(plan: Plan, input: { mealId: string; names: string[] }): Promise<Plan> {
+  const meal = plan.food.meals.find(item => item.slot.id === input.mealId);
+  if (!meal) throw Error('要补充的餐次不存在');
+  if (!process.env.AMAP_API_KEY) throw Error('高德服务未配置，无法核验餐厅分店');
+  const map = createMapProvider(process.env, fetch, { intervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400 });
+  const places = await map.discover(meal.slot.city, 'food', input.names, Math.min(16, input.names.length * 3), plan.request.transport);
+  const matches = input.names.map(name => places.find((place: any) => normalize(place.name) === normalize(name))
+    || places.find((place: any) => normalize(place.name).includes(normalize(name)) || normalize(name).includes(normalize(place.name))))
+    .filter((place: any, index: number, all: any[]) => place && all.findIndex(other => other?.poiId === place.poiId) === index);
+  if (!matches.length) throw Error('没有找到准确餐厅，请补充完整店名或分店名');
+  const existing = plan.food.meals.flatMap(item => item.options.map(option => option.restaurant));
+  const preferredRestaurants: Restaurant[] = [...existing, ...matches.map((place: any) => ({ id: place.poiId, city: meal.slot.city, preferred: true, preferredMealId: meal.slot.id, name: place.name, address: place.address, lng: place.lng, lat: place.lat, category: place.category, price: place.price || null, hours: place.hours || '', source: '用户输入 + 高德地图 POI', queriedAt: new Date().toISOString(), imageUrl: place.imageUrl || null, navigationUrl: place.navigationUrl || null, tips: [] }))];
+  const food = await rebuildFoodPlan(plan.request, plan.days, plan.budget, process.env, fetch, { mapIntervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400, preferredRestaurants, discoverySources: null });
+  const origin = plan.route.points.find(point => point.kind === 'origin') || null;
+  const points = createRoutePoints(origin, plan.request, plan.days, food);
+  const paths = await routePaths(plan, points, map);
+  const route = { ...plan.route, points, paths, state: paths.length && paths.every(path => path.state === 'live') ? 'live' as const : 'pending' as const, queriedAt: new Date().toISOString() };
+  return { ...plan, food, route, budgetMeta: budgetMeta(plan.request, route), sources: { ...plan.sources, map: route.state, updatedAt: new Date().toISOString() } };
 }
 
 export async function replanDay(plan: Plan, change: { dayIndex: number; replacements: { stopId: string; name: string }[]; removedStopIds: string[]; entertainmentSelections: EntertainmentSelection[] }): Promise<Plan> {
