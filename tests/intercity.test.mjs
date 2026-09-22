@@ -24,3 +24,12 @@ test('verified arrival and departure hubs become daily route anchors', async () 
   assert.equal(transfers[0].minutes, 60);
   assert.equal(transfers[0].mode, 'high_speed_rail');
 });
+
+test('an onward train makes the previous destination station the final daily anchor', () => {
+  const days = anchorIntercityDays([
+    { city: '杭州', date: '2026-10-01', title: '', stops: [] },
+    { city: '北京', date: '2026-10-02', title: '', stops: [] },
+  ], [{ fromCity: '杭州', toCity: '北京', mode: 'high_speed_rail', departureHub: place('hzd', '杭州东站'), arrivalHub: place('bjn', '北京南站'), departureAt: '2026-10-02T00:00:00.000Z', arrivalAt: '2026-10-02T05:00:00.000Z', tripNo: 'G20' }]);
+  assert.equal(days[0].endHub.name, '杭州东站');
+  assert.equal(days[1].startHub.name, '北京南站');
+});

@@ -5,6 +5,7 @@ import type { Plan } from '../lib/plan';
 import type { EvidenceTip, FoodPlan, Meal, MealOption } from '../lib/food-types';
 import { clockTime } from '../lib/food.mjs';
 import { parsePlaceNames } from '../lib/place-input.mjs';
+import { TransitDetails } from './transit-details';
 
 export type MealAction = (mealId: string, action: 'lock' | 'cheaper' | 'closer' | 'select' | 'selectAndLock', restaurantId?: string) => void;
 export type RestaurantSearchAction = (mealId: string, names: string[]) => Promise<void>;
@@ -41,7 +42,7 @@ function RestaurantOption({ option, food, label, children }: { option: MealOptio
     {[...option.reasons, ...option.pending].map(reason => <p className="constraint-note" key={reason}>{reason}</p>)}
     {restaurant.navigationUrl && <a className="nav-link" href={restaurant.navigationUrl} target="_blank" rel="noreferrer">在高德地图打开并导航 →</a>}
     <details><summary>查看逐段路线与数据来源</summary>
-      {option.route.map((leg, i) => <p key={i}>{leg.from} → {leg.to}：{leg.minutes === null ? '待确认' : `约 ${leg.minutes} 分钟 / ${leg.meters} 米`} · 高德路线 · {stamp(leg.queriedAt)}</p>)}
+      {option.route.map((leg, i) => <div key={i}><p>{leg.from} → {leg.to}：{leg.minutes === null ? '待确认' : `约 ${leg.minutes} 分钟 / ${leg.meters} 米`} · 高德路线 · {stamp(leg.queriedAt)}</p><TransitDetails leg={leg} compact /></div>)}
       {option.direct && <p>原路线：{option.direct.from} → {option.direct.to}，{option.direct.minutes === null ? '待确认' : `约 ${option.direct.minutes} 分钟`}</p>}
       <p>{restaurant.source} · 查询于 {stamp(restaurant.queriedAt)}。人均区间按参考价格上下浮动 20% 估算，实际账单及出行日营业时间请向门店确认。</p>
     </details>

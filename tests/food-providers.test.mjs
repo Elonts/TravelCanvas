@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { attachEvidence, buildFoodPlan, createMapProvider, extractTips, isMealRestaurant, normalizeRestaurant, safeSourceUrl, searchNotes, validateExtraction } from '../lib/food-providers.mjs';
+import { attachEvidence, buildFoodPlan, createMapProvider, extractTips, isMealRestaurant, normalizeRestaurant, parseTransitSteps, safeSourceUrl, searchNotes, validateExtraction } from '../lib/food-providers.mjs';
 import { allocateBudget } from '../lib/food.mjs';
 import { fixtureRequest as request, fixtureDays as days, fixtureFetch, testEnv, poi, fixtureContent } from './helpers/food-fixture.mjs';
 
@@ -96,6 +96,16 @@ test('route 2.0 also accepts nested polyline objects returned by transit', async
   }, { intervalMs: 0 });
   const result = await provider.route(days[0].stops[0], days[0].stops[1], 'transit', '杭州');
   assert.deepEqual(result.polyline, [[120.1, 30.2], [120.15, 30.25], [120.15, 30.25], [120.2, 30.2]]);
+});
+
+test('transit parsing preserves line, stops, walking and service window without inventing live departures', () => {
+  const steps = parseTransitSteps({ segments: [{ walking: { distance: '420', cost: { duration: '360' }, steps: [{ instruction: '步行至湖滨站' }] }, bus: { buslines: [{ name: '地铁1号线(萧山国际机场-湘湖)', type: '地铁', departure_stop: { name: '龙翔桥' }, arrival_stop: { name: '火车东站' }, via_num: '5', distance: '8200', cost: { duration: '1200' }, start_time: '0600', end_time: '2300' }] } }] });
+  assert.deepEqual(steps.map(step => step.kind), ['walk', 'subway']);
+  assert.equal(steps[1].lineName, '地铁1号线');
+  assert.equal(steps[1].fromStop, '龙翔桥');
+  assert.equal(steps[1].toStop, '火车东站');
+  assert.equal(steps[1].firstTime, '0600');
+  assert.equal('liveDeparture' in steps[1], false);
 });
 
 test('a user-selected restaurant with unknown fields is arranged unless it has a hard conflict', async () => {

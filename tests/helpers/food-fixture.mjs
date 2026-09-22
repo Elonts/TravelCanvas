@@ -37,6 +37,7 @@ export async function fixtureFetch(input, options = {}) {
     }
     if (url.pathname.includes('/weather/weatherInfo')) return reply({ status: '1', forecasts: [{ city: '杭州', adcode: url.searchParams.get('city'), reporttime: '2026-09-19 11:00:00', casts: ['2026-09-10', '2026-09-19', '2026-09-20', '2026-09-21'].map(date => ({ date, dayweather: '晴', nightweather: '多云', daytemp: '28', nighttemp: '20' })) }] });
     if (url.pathname.includes('/place/')) {
+      if (url.pathname.includes('/detail') && url.searchParams.get('id') === 'hotel-1') return reply({ status: '1', pois: [{ id: 'hotel-1', name: '测试酒店', address: '杭州市测试路1号', location: '120.16,30.25', typecode: '100100' }] });
       if (url.searchParams.get('types') === '100000') return reply({ status: '1', pois: [{ id: 'hotel-1', name: '测试酒店', address: '杭州市测试路1号', location: '120.16,30.25', typecode: '100100' }] });
       if (url.searchParams.get('types') === '050000') return reply({ status: '1', pois: Array.from({ length: 6 }, (_, i) => poi(i)) });
       if (url.searchParams.get('types') === '110000') return reply({ status: '1', pois: Array.from({ length: 12 }, (_, i) => ({

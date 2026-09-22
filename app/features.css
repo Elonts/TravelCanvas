@@ -30,6 +30,7 @@
 .amap-order-marker { display: grid; width: 36px; height: 36px; padding: 0; color: white; font-weight: 800; background: var(--green); border: 3px solid white; border-radius: 50% 50% 50% 8px; box-shadow: 0 4px 12px #18322e55; transform: rotate(-45deg); place-items: center; }
 .amap-order-marker span { transform: rotate(45deg); }
 .amap-order-marker.hotel { background: #a5522b; }
+.amap-order-marker.hub { background: #355d80; }
 .map-fallback { position: absolute; inset: 0; display: grid; padding: 40px; background: #edf2ed; place-content: center; text-align: center; }
 .map-fallback p { max-width: 520px; color: var(--muted); }
 .map-marker { cursor: pointer; outline: none; }
@@ -53,6 +54,15 @@
 .map-legend .hotel-dot { background: #a5522b; }
 .transfer-list { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 .transfer-list > p { margin: 6px 0; }
+.transit-leg-list { display: grid; gap: 8px; margin-top: 15px; padding-top: 14px; border-top: 1px solid var(--line); }
+.transit-leg-list details { padding: 10px 11px; background: #f2f4ef; border-radius: 8px; }
+.transit-leg-list summary { color: var(--ink); font-size: 12px; font-weight: 700; cursor: pointer; }
+.transit-steps { display: grid; gap: 8px; margin-top: 10px; }
+.transit-step { display: grid; grid-template-columns: 28px 1fr; gap: 9px; align-items: start; }
+.transit-step-icon { display: grid; width: 28px; height: 28px; color: white; font-size: 11px; font-weight: 800; background: var(--green); border-radius: 50%; place-items: center; }
+.transit-step.walk .transit-step-icon { color: var(--green); background: #dfeae2; }
+.transit-step p, .transit-step small, .transit-pending { margin: 2px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.transit-steps.compact { padding: 8px 10px; background: #f2f4ef; border-radius: 7px; }
 .map-note, .map-empty { color: var(--muted); font-size: 11px !important; line-height: 1.6; }
 .map-empty { padding: 80px 20px; text-align: center; }
 .route-map button { justify-self: auto; }

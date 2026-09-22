@@ -35,13 +35,19 @@ try {
       await page.locator('.advanced-planning > summary').click();
       await page.getByLabel('旅行预算（元）').fill('6000');
       await page.getByLabel('餐饮偏好').fill('杭帮菜');
+      await page.getByLabel('市内交通').selectOption('transit');
+      await page.getByLabel('上海到杭州交通方式').selectOption('drive');
       if (mode === 'fixtures') {
-        await page.locator('.booked-hotel-input > summary').click();
-        await page.getByRole('button', { name: '添加一家已订酒店' }).click();
+        await page.getByRole('button', { name: '添加酒店' }).click();
         await page.getByLabel('酒店 1 名称').fill('测试酒店');
         const checkIn = await page.getByLabel('酒店 1 入住日期').inputValue();
         const checkOut = new Date(`${checkIn}T00:00:00Z`); checkOut.setUTCDate(checkOut.getUTCDate() + 1);
         await page.getByLabel('酒店 1 退房日期').fill(checkOut.toISOString().slice(0, 10));
+        await page.getByRole('button', { name: '核验酒店位置' }).click();
+        const hotelCandidate = page.locator('.hotel-editor .place-candidates button').first();
+        await hotelCandidate.waitFor();
+        await hotelCandidate.click();
+        assert.ok((await page.locator('.hotel-editor .verified-place').innerText()).includes('位置已核验'));
       }
       await page.getByRole('button', { name: /开始发现地点/ }).click();
       await page.locator('.candidate-panel').waitFor({ timeout: 60000 });
@@ -50,33 +56,32 @@ try {
 
       if (mode === 'offline') {
         assert.equal(await page.locator('.candidate-card').count(), 0);
-        assert.equal(await page.getByRole('button', { name: /用已选地点生成路线/ }).isDisabled(), true);
+        assert.equal(await page.getByRole('button', { name: /生成基础路线并顺路找美食/ }).isDisabled(), true);
         assert.ok((await page.locator('.candidate-panel').innerText()).includes('高德 部分待确认'));
       } else {
         const customAttraction = page.getByText('没有想去的景点？批量添加').locator('..');
         await customAttraction.getByRole('textbox').fill('雷峰塔、灵隐寺');
         await customAttraction.getByRole('button', { name: /核验并加入候选/ }).click();
         await page.getByRole('heading', { name: '雷峰塔', exact: true }).waitFor({ timeout: 60000 });
-        for (const label of ['景区 · 杭州', '美食 · 杭州']) {
-          const card = page.locator('.candidate-card').filter({ hasText: label }).first();
-          await card.getByRole('button', { name: '加入行程' }).click();
-        }
-        const unknownFood = page.locator('.candidate-card').filter({ hasText: '测试未知餐厅（西湖店）' });
-        await unknownFood.getByRole('button', { name: '加入行程' }).click();
+        const cards = page.locator('.candidate-card').filter({ hasText: '景区 · 杭州' });
+        await cards.nth(0).getByRole('button', { name: '加入行程' }).click();
+        await cards.nth(1).getByRole('button', { name: '加入行程' }).click();
         assert.ok(await page.locator('.candidate-image img').count() >= 3);
         await page.waitForFunction(() => [...document.querySelectorAll('.candidate-image img')].slice(0, 3).every(image => image.complete && image.naturalWidth > 0));
-        assert.ok(await page.getByText(/小红书公开笔记证据/).count() > 0);
-        assert.equal(await page.getByText(/公开搜索相关性前 8 篇/).count(), 1);
+        assert.equal(await page.getByText(/小红书公开笔记证据/).count(), 0);
+        assert.equal(await page.getByText(/公开攻略综合推荐来源/).count(), 1);
         assert.ok(await page.getByText(/旅游攻略原文证据/).count() > 0);
-        await page.getByRole('button', { name: /用已选地点生成路线/ }).click();
+        await page.getByRole('button', { name: /生成基础路线并顺路找美食/ }).click();
         await page.locator('.result').waitFor({ timeout: 60000 });
-        await page.getByText('已收起候选地点').waitFor();
+        await page.getByText('已收起景区候选').waitFor();
         await page.getByRole('button', { name: '展开并修改选择' }).click();
         await page.getByText('先挑喜欢的，再安排路线').waitFor();
         assert.equal(await page.locator('.journey-live[data-state="plan"]').count(), 1);
         await page.locator('.route-map').waitFor();
         assert.ok(await page.locator('.map-point-list button').count() >= 3);
         assert.equal(await page.getByLabel('高德交互式行程路线图').count(), 1);
+        assert.ok(await page.getByText('逐段公共交通指引', { exact: true }).count() > 0);
+        assert.ok(await page.getByText(/实时方案/).count() > 0);
         if (await page.locator('.map-fallback').count()) assert.ok((await page.locator('.map-fallback').innerText()).includes('地图'));
         assert.equal(await page.locator('.day-tabs button').count(), 1);
         assert.ok(await page.locator('.day-guide').count() === 1);
@@ -96,7 +101,7 @@ try {
         assert.ok((await page.locator('.map-popover').innerText()).includes(mapPointName));
         assert.equal(await page.locator('.meal').count(), 2);
         const foodSummaryText = await page.locator('.sidebar .card').filter({ hasText: '餐饮预算 · 全员' }).innerText();
-        assert.match(foodSummaryText, /餐价格待确认（不是 ¥0）|另有 \d+ 餐待确认/);
+        assert.match(foodSummaryText, /¥\d+–\d+|餐价格待确认（不是 ¥0）|另有 \d+ 餐待确认/);
         assert.ok(await page.getByText(/匹配口味：杭帮菜/).count() > 0);
         const meal = page.locator('.meal').first();
         if (await meal.getByRole('button', { name: '解锁餐厅' }).count()) await meal.getByRole('button', { name: '解锁餐厅' }).click();
@@ -174,7 +179,7 @@ try {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'Mobile layout must not overflow');
       await page.screenshot({ path: `test-artifacts/${mode}-mobile.png`, fullPage: true });
       assert.deepEqual(errors, []);
-      console.log(`PASS browser: ${mode}, two-stage discovery and responsive layout`);
+      console.log(`PASS browser: ${mode}, route-first discovery and responsive layout`);
     } finally { await page.close(); server.stop(); }
   }
 } finally { await browser.close(); }

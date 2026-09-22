@@ -38,7 +38,7 @@ for (const mode of ['fixtures', 'offline']) {
     const guideRankedAttractions = initial.found.value.candidates.filter(candidate => candidate.kind === 'attraction');
     assert.equal(guideRankedAttractions[0].name, '西湖风景名胜区');
     assert.ok(guideRankedAttractions[0].guideScore > guideRankedAttractions[1].guideScore);
-    assert.ok(initial.found.value.candidates.some(candidate => candidate.kind === 'food' && candidate.evidence.length));
+    assert.ok(initial.found.value.candidates.every(candidate => candidate.kind === 'attraction'));
     assert.ok(initial.found.value.candidates.every(candidate => candidate.kind !== 'entertainment'));
     assert.ok(initial.found.value.candidates.every(candidate => candidate.navigationUrl.startsWith('https://uri.amap.com/navigation')));
     assert.ok(initial.found.value.candidates.some(candidate => candidate.imageUrl?.startsWith('/api/poi-image?url=')));
@@ -51,13 +51,11 @@ for (const mode of ['fixtures', 'offline']) {
     const customAttraction = await post('/api/discover/custom', { discoveryId: initial.found.value.discoveryId, city: '杭州', kind: 'attraction', names: ['雷峰塔'] });
     assert.equal(customAttraction.status, 200, JSON.stringify(customAttraction.value));
     assert.ok(customAttraction.value.candidates.some(candidate => candidate.name === '雷峰塔' && candidate.kind === 'attraction'));
-    const customFood = await post('/api/discover/custom', { discoveryId: initial.found.value.discoveryId, city: '杭州', kind: 'food', names: ['测试江南餐厅（西湖店）'] });
-    assert.equal(customFood.status, 200, JSON.stringify(customFood.value));
-    assert.ok(customFood.value.candidates.some(candidate => candidate.name === '测试江南餐厅（西湖店）' && candidate.kind === 'food'));
     assert.equal(initial.generated.status, 200, JSON.stringify(initial.generated.value));
     let plan = initial.generated.value;
     assert.equal(plan.guides.length, 8);
     assert.equal(plan.food.meals.length, 2); assert.ok(plan.planId);
+    assert.ok(plan.food.sources.length > 0, 'food evidence is searched only after the attraction route exists');
     assert.ok(plan.days.flatMap(day => day.stops).every(stop => stop.navigationUrl));
     assert.equal(plan.food.summary.unresolved, 0);
     assert.equal(plan.dayGuides.length, plan.days.length);
@@ -71,6 +69,10 @@ for (const mode of ['fixtures', 'offline']) {
     assert.ok(plan.route.paths.every(path => path.state === 'live'));
     const originalStops = structuredClone(plan.days);
     const mealId = plan.food.meals[0].slot.id;
+    const customFood = await post('/api/plan/restaurants', { planId: plan.planId, revision: plan.revision, mealId, names: ['测试江南餐厅（西湖店）'] });
+    assert.equal(customFood.status, 200, JSON.stringify(customFood.value));
+    plan = customFood.value;
+    assert.ok(plan.food.meals.find(meal => meal.slot.id === mealId).options.some(option => option.restaurant.name === '测试江南餐厅（西湖店）'));
     if (plan.food.meals[0].locked) {
       const unlock = await post('/api/food', { planId: plan.planId, revision: plan.revision, mealId, action: 'lock' });
       assert.equal(unlock.status, 200); plan = unlock.value;
@@ -137,7 +139,7 @@ for (const mode of ['fixtures', 'offline']) {
     assert.deepEqual(cities.generated.value.days.map(day => day.city), cities.generated.value.route.cityOrder);
     assert.deepEqual(cities.generated.value.route.points.map(point => point.order), cities.generated.value.route.points.map((_, index) => index + 1));
     assert.deepEqual(cities.generated.value.route.cityOrder, ['杭州', '北京']);
-    assert.equal(cities.generated.value.route.transfers.length, 2);
+    assert.equal(cities.generated.value.route.transfers.length, 0);
     assert.equal(cities.generated.value.route.state, 'live');
     console.log('PASS production HTTP smoke: fixtures discovery, selection and route generation');
   } finally { server.stop(); }

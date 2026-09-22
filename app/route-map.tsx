@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { RouteOverview } from '../lib/plan';
+import { TransitDetails } from './transit-details';
 
 declare global { interface Window { AMap?: any; _AMapSecurityConfig?: { securityJsCode: string } } }
 const stamp = (value: string) => new Date(value).toLocaleString('zh-CN');
@@ -46,7 +47,8 @@ export function RouteMap({ route }: { route: RouteOverview }) {
       const overlays: any[] = [];
       for (const path of paths) if (path.polyline?.length) overlays.push(new AMap.Polyline({ path: path.polyline, strokeColor: '#226054', strokeWeight: 7, strokeOpacity: .86, showDir: true }));
       for (const point of points) {
-        const marker = new AMap.Marker({ position: [point.lng, point.lat], title: point.name, content: `<button class="amap-order-marker ${point.kind === 'hotel' ? 'hotel' : ''}" aria-label="行程第 ${point.order} 站${point.kind === 'hotel' ? '，已预订酒店' : ''}"><span>${point.order}</span></button>`, offset: new AMap.Pixel(-18, -36) });
+        const special = point.kind === 'hotel' ? 'hotel' : point.kind === 'station' || point.kind === 'airport' ? 'hub' : '';
+        const marker = new AMap.Marker({ position: [point.lng, point.lat], title: point.name, content: `<button class="amap-order-marker ${special}" aria-label="行程第 ${point.order} 站，${point.name}"><span>${point.order}</span></button>`, offset: new AMap.Pixel(-18, -36) });
         marker.on('click', () => setActiveId(point.id)); overlays.push(marker);
       }
       map.add(overlays);
@@ -64,8 +66,9 @@ export function RouteMap({ route }: { route: RouteOverview }) {
       {active && <div className="map-popover"><div className="map-place-detail">{active.imageUrl && <img src={active.imageUrl} alt={`${active.name}地点图片`} />}<div><b><span>{active.order}</span>{active.name}</b><p>{active.city} · {active.date} · {active.time}</p><p>{active.introduction}</p><small>{active.address}<br />{incoming?.state === 'live' ? `上一站到这里：约 ${incoming.minutes} 分钟 / ${Math.round((incoming.meters || 0) / 100) / 10} 公里` : incoming ? `交通距离待确认：${incoming.error || '路线服务未返回结果'}` : '行程起点'}</small>{active.imageAttribution && <small>图片：{active.imageAttribution.sourceUrl ? <a href={active.imageAttribution.sourceUrl} target="_blank" rel="noreferrer">{active.imageAttribution.label} ↗</a> : active.imageAttribution.label}</small>}{active.navigationUrl && <a className="nav-link" href={active.navigationUrl} target="_blank" rel="noreferrer">在高德查看 / 导航 →</a>}</div></div></div>}
     </div>
     {!!points.length && <div className="map-point-list" aria-label="路线地点顺序">{points.map(point => <button type="button" key={point.id} className={activeId === point.id ? 'active' : 'secondary'} onClick={() => setActiveId(point.id)}><span>{point.order}</span>{point.name}</button>)}</div>}
+    {route.paths.some(path => path.transport === 'transit') && <div className="transit-leg-list"><b>逐段公共交通指引</b>{route.paths.filter(path => (date === 'all' || path.date === date) && path.transport === 'transit').map((path, index) => <details key={`${path.fromId}-${path.toId}-${index}`}><summary>{path.from} → {path.to} · {path.minutes === null ? '路线待确认' : `约 ${path.minutes} 分钟`}</summary><TransitDetails leg={path} /><a className="nav-link" href="https://ditu.amap.com/" target="_blank" rel="noreferrer">在高德确认实时方案 →</a></details>)}</div>}
     <div className="map-legend"><span><i className="origin-dot" />出发地</span><span><i />景点 / 餐厅 / 娱乐</span><span><i className="hotel-dot" />已预订酒店</span><span>点击地图序号或下方地点按钮查看图片、介绍和交通距离</span></div>
-    {!!route.transfers.length && <div className="transfer-list"><b>跨城衔接（按当前查询估算）</b>{route.transfers.map((leg, index) => <p key={`${leg.from}-${leg.to}-${index}`}>{leg.from} → {leg.to} · {leg.state === 'live' ? `约 ${leg.minutes} 分钟 / ${Math.round((leg.meters || 0) / 1000)} 公里` : `待确认：${leg.error || '路线未返回'}`} · {leg.transport === 'drive' ? '驾车' : '公共交通'}</p>)}</div>}
+    {!!route.transfers.length && <div className="transfer-list"><b>跨城衔接</b>{route.transfers.map((leg, index) => <p key={`${leg.from}-${leg.to}-${index}`}>{leg.from} → {leg.to} · {leg.mode === 'drive' ? leg.state === 'live' ? `自驾约 ${leg.minutes} 分钟 / ${Math.round((leg.meters || 0) / 1000)} 公里` : `自驾待确认：${leg.error || '路线未返回'}` : `${{ high_speed_rail: '高铁', train: '普通火车', flight: '飞机' }[leg.mode]}${leg.tripNo ? ` ${leg.tripNo}` : ''} · ${leg.departureAt ? new Date(leg.departureAt).toLocaleString('zh-CN') : '出发时间待确认'} → ${leg.arrivalAt ? new Date(leg.arrivalAt).toLocaleString('zh-CN') : '到达时间待确认'} · 用户提供，出发前确认`}</p>)}</div>}
     <p className="map-note">{route.note} 数据来源：{route.source}；查询时间：{stamp(route.queriedAt)}。</p>
   </section>;
 }
