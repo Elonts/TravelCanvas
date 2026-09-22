@@ -14,14 +14,16 @@ import { amapNavigationUrl } from './navigation.mjs';
 import { verifyDayReservations } from './reservations.mjs';
 import { attachHotelAnchors, verifyBookedHotels } from './booked-hotels.mjs';
 import { queryWeather, type WeatherSnapshot } from './weather.mjs';
+import { anchorIntercityDays, buildIntercityTransfers, verifyIntercityLegs } from './intercity.mjs';
 
 export { requestSchema };
 export type TripRequest = z.infer<typeof requestSchema>;
 export type DataState = 'live' | 'demo' | 'pending';
 type HotelRecommendation = { id: string; title: string; area: string; rationale: string; filters: string; priceGuide: string; ctripUrl: string; query: string; booked?: boolean; address?: string; navigationUrl?: string | null };
-export type RoutePoint = { id: string; order: number; name: string; city: string; date: string; time: string; kind: 'origin' | 'hotel' | 'attraction' | 'entertainment' | 'restaurant'; lng: number; lat: number; verified: boolean; poiId?: string; address: string; introduction: string; imageUrl: string | null; imageAttribution?: import('./web-images.mjs').ImageAttribution | null; navigationUrl: string | null };
+export type RoutePoint = { id: string; order: number; name: string; city: string; date: string; time: string; kind: 'origin' | 'hotel' | 'station' | 'airport' | 'attraction' | 'entertainment' | 'restaurant'; lng: number; lat: number; verified: boolean; poiId?: string; address: string; introduction: string; imageUrl: string | null; imageAttribution?: import('./web-images.mjs').ImageAttribution | null; navigationUrl: string | null };
 export type RoutePath = RouteLeg & { fromId: string; toId: string; date: string; transport: 'walk' | 'transit' | 'drive' };
-export type RouteOverview = { points: RoutePoint[]; paths: RoutePath[]; transfers: (RouteLeg & { transport: 'transit' | 'drive' })[]; cityOrder: string[]; source: '高德地图' | '顺序示意'; state: DataState; queriedAt: string; note: string };
+export type IntercityTransfer = RouteLeg & { transport: 'transit' | 'drive'; mode: 'high_speed_rail' | 'train' | 'flight' | 'drive'; departureAt: string | null; arrivalAt: string | null; tripNo: string };
+export type RouteOverview = { points: RoutePoint[]; paths: RoutePath[]; transfers: IntercityTransfer[]; cityOrder: string[]; source: '高德地图' | '顺序示意'; state: DataState; queriedAt: string; note: string };
 type Weather = WeatherSnapshot;
 export type DayGuide = { date: string; city: string; weather: Weather; hotels: HotelRecommendation[]; reminders: string[] };
 export type EntertainmentOption = Stop & { routeMinutes: number | null; routeMeters: number | null; preference: string };
@@ -45,7 +47,7 @@ async function orderDestinations(request: TripRequest, map: MapProvider | null) 
   if (!map) return { origin: null, destinations: request.destinations.map(name => ({ name, location: null })), state: 'demo' as const };
   const [origin, ...locations] = await Promise.all([request.origin, ...request.destinations].map(name => map.geocode(name)));
   const known = request.destinations.map((name, index) => ({ name, location: locations[index] })).filter(item => item.location) as { name: string; location: GeoPoint }[];
-  const orderedKnown = orderStops(known.map(item => ({ ...item, lng: item.location.lng, lat: item.location.lat })), origin);
+  const orderedKnown = request.intercityLegs.length ? known : orderStops(known.map(item => ({ ...item, lng: item.location.lng, lat: item.location.lat })), origin);
   const unknown = request.destinations.filter(name => !known.some(item => item.name === name)).map(name => ({ name, location: null }));
   return { origin, destinations: [...orderedKnown, ...unknown], state: origin && !unknown.length ? 'live' as const : 'pending' as const };
 }
@@ -76,18 +78,6 @@ async function aiCandidateNames(request: TripRequest, destination: string, days:
   } catch { return { stops: fallback, state: 'demo' as const }; }
 }
 
-async function transferRoutes(request: TripRequest, map: MapProvider | null, origin: GeoPoint | null, destinations: { name: string; location: GeoPoint | null }[]) {
-  const transport: 'drive' | 'transit' = request.transport === 'drive' ? 'drive' : 'transit';
-  const places = [origin && { ...origin, city: request.origin }, ...destinations.map(item => item.location && { ...item.location, city: item.name })].filter(Boolean) as (GeoPoint & { city: string })[];
-  const legs = [];
-  for (let index = 1; index < places.length; index++) {
-    const from = places[index - 1], to = places[index];
-    const leg = map ? await map.route(from, to, transport, from.city, to.city) : { from: from.name, to: to.name, minutes: null, meters: null, fare: null, state: 'pending' as const, queriedAt: new Date().toISOString() };
-    legs.push({ ...leg, transport });
-  }
-  return legs;
-}
-
 function selectedStops(candidates: DiscoveryCandidate[], city: string): Stop[] {
   return candidates.filter((candidate): candidate is DiscoveryCandidate & { kind: 'attraction' } => candidate.city === city && candidate.kind === 'attraction').map(candidate => ({
     id: `selected-${candidate.poiId}`, poiId: candidate.poiId, city, kind: candidate.kind, name: candidate.name, address: candidate.address,
@@ -104,6 +94,7 @@ async function routePaths(points: RoutePoint[], map: MapProvider | null, transpo
   for (let index = 1; index < points.length; index++) {
     const from = points[index - 1], to = points[index];
     if (from.date !== to.date && from.kind !== 'origin') continue;
+    if (from.kind === 'origin' && (to.kind === 'station' || to.kind === 'airport')) continue;
     const leg = await map.route(from, to, transport, from.city, to.city);
     paths.push({ ...leg, fromId: from.id, toId: to.id, date: to.date, transport });
   }
@@ -145,6 +136,7 @@ export async function buildPlan(request: TripRequest, selected: DiscoveryCandida
   const map = process.env.AMAP_API_KEY ? createMapProvider(process.env, fetch, { intervalMs: testMapInterval }) : null;
   const orderedCities = await orderDestinations(request, map);
   const bookedHotels = await verifyBookedHotels(request, map);
+  const intercityLegs = await verifyIntercityLegs(request, map);
   const dayCounts = allocateDestinationDays(request.days, orderedCities.destinations.length);
   const days: Day[] = [];
   const aiStates: DataState[] = [], mapStates: DataState[] = [orderedCities.state];
@@ -164,7 +156,8 @@ export async function buildPlan(request: TripRequest, selected: DiscoveryCandida
     aiStates.push(candidates.state); mapStates.push(mapped.state);
   }
   days.forEach((day, index) => { day.title = `第 ${index + 1} 天 · ${day.city} · ${day.stops[0]?.name || '待补充地点'}`; });
-  const anchoredDays = attachHotelAnchors(days, bookedHotels, orderStops);
+  const hotelDays = attachHotelAnchors(days, bookedHotels, orderStops);
+  const anchoredDays = anchorIntercityDays(hotelDays, intercityLegs).map((day: Day) => ({ ...day, stops: orderStops(day.stops, day.startHotel || day.startHub || null) }));
   days.splice(0, days.length, ...anchoredDays);
   const reservationDays = await Promise.all(days.map(day => verifyDayReservations(day)));
   days.splice(0, days.length, ...reservationDays);
@@ -179,14 +172,17 @@ export async function buildPlan(request: TripRequest, selected: DiscoveryCandida
   const entertainmentDays: DayEntertainment[] = days.map((day, dayIndex) => ({ dayIndex, anchorName: day.stops.at(-1)?.name || day.startHotel?.name || '', selections: [], options: [], warning: '请先选择娱乐类型和时间段，再按当天路线查找具体地点。' }));
   const orderedStops = days.flatMap(day => day.stops);
   const weatherData = dailyWeather[0] || await queryWeather(primaryCity, request.startDate, orderedCities.destinations[0]?.location || null);
-  const transfers = await transferRoutes(request, map, orderedCities.origin, orderedCities.destinations);
+  const cityLocations = new Map<string, GeoPoint>();
+  if (orderedCities.origin) cityLocations.set(request.origin, orderedCities.origin);
+  orderedCities.destinations.forEach(item => { if (item.location) cityLocations.set(item.name, item.location); });
+  const transfers = intercityLegs.length ? await buildIntercityTransfers(request, intercityLegs, map, cityLocations) : [];
   const points = createRoutePoints(orderedCities.origin, request, days, food);
   const paths = await routePaths(points, map, request.transport);
-  const routeState: DataState = map && orderedCities.state === 'live' && transfers.every(leg => leg.state === 'live') && paths.every(leg => leg.state === 'live') ? 'live' : 'pending';
+  const routeState: DataState = map && orderedCities.state === 'live' && transfers.every(leg => leg.mode !== 'drive' || leg.state === 'live') && paths.every(leg => leg.state === 'live') ? 'live' : 'pending';
   const route: RouteOverview = {
     points, paths, transfers, cityOrder: orderedCities.destinations.map(item => item.name),
     source: map ? '高德地图' : '顺序示意', state: routeState, queriedAt: new Date().toISOString(),
-    note: map ? '城市顺序按出发地与城市坐标减少明显折返；点位连线表示访问顺序，实际道路与耗时以高德查询结果为准。' : '未配置高德地图，保留用户选择顺序；地图仅显示已有坐标的访问顺序。',
+    note: map ? '跨城方式按用户逐段选择；站点、酒店和景区作为路线锚点，实际道路与耗时以高德查询结果为准。' : '未配置高德地图，保留用户选择顺序；地图仅显示已有坐标的访问顺序。',
   };
   const destinationLabel = route.cityOrder.join('、');
   const hotels = recommendHotels({ destination: destinationLabel, days: request.days, budget: Object.values(budget).reduce((a, b) => a + b, 0), travelers: request.travelers, preferences: request.preferences || '', stops: orderedStops });

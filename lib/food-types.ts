@@ -19,7 +19,9 @@ export type RouteLeg = {
   from: string; to: string; minutes: number | null; meters: number | null;
   fare: number | null; state: 'live' | 'pending'; queriedAt: string;
   polyline?: [number, number][]; error?: string | null;
+  transitSteps?: TransitStep[];
 };
+export type TransitStep = { kind: 'walk' | 'bus' | 'subway'; instruction: string; lineName?: string; fromStop?: string; toStop?: string; viaStops?: number; minutes?: number | null; meters?: number | null; firstTime?: string; lastTime?: string };
 export type MealSlot = {
   id: string; dayIndex: number; city: string; label: string; date: string;
   previous: import('./fixtures').Stop; next: import('./fixtures').Stop | null;

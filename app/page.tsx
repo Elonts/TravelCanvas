@@ -9,6 +9,7 @@ import { CandidatePicker } from './candidate-picker';
 import type { DiscoveryResult } from '../lib/discovery-types';
 import { userFacingRequestError } from '../lib/client-errors.mjs';
 import { ENTERTAINMENT_TYPES } from '../lib/entertainment';
+import { TravelAnchors, type HotelDraft, type IntercityLegDraft } from './travel-anchors';
 
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
@@ -24,15 +25,33 @@ export default function Home() {
   const [error, setError] = useState('');
   const [changeError, setChangeError] = useState('');
   const [destinations, setDestinations] = useState<string[]>([]);
-  const [bookedHotels, setBookedHotels] = useState<{ city: string; name: string; addressHint: string; checkIn: string; checkOut: string }[]>([]);
+  const [origin, setOrigin] = useState('上海');
+  const [tripStartDate, setTripStartDate] = useState(today);
+  const [tripDays, setTripDays] = useState(2);
+  const [bookedHotels, setBookedHotels] = useState<HotelDraft[]>([]);
+  const [intercityLegs, setIntercityLegs] = useState<IntercityLegDraft[]>([]);
   const [candidateExpanded, setCandidateExpanded] = useState(false);
+  const tripEndDate = new Date(Date.parse(`${tripStartDate}T00:00:00Z`) + Math.max(1, tripDays) * 86400000).toISOString().slice(0, 10);
+  useEffect(() => {
+    const cities = [origin.trim(), ...destinations].filter(Boolean);
+    setIntercityLegs(current => cities.slice(0, -1).map((fromCity, index) => {
+      const toCity = cities[index + 1];
+      return current.find(leg => leg.fromCity === fromCity && leg.toCity === toCity) || { fromCity, toCity, mode: 'high_speed_rail', departureAt: '', arrivalAt: '', tripNo: '' };
+    }));
+  }, [origin, destinations]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setLoading(true); setError(''); setChangeError('');
     try {
       if (!destinations.length) throw Error('请至少选择一个目的地城市');
       const body: Record<string, FormDataEntryValue | string[]> = Object.fromEntries(new FormData(event.currentTarget));
       body.destinations = destinations;
-      (body as Record<string, unknown>).bookedHotels = bookedHotels.filter(hotel => hotel.city && hotel.name.trim());
+      const unverifiedHotel = bookedHotels.find(hotel => hotel.name.trim() && !hotel.verified);
+      if (unverifiedHotel) throw Error(`请先核验酒店“${unverifiedHotel.name}”的具体位置`);
+      const incompleteLeg = intercityLegs.find(leg => leg.mode !== 'drive' && (!leg.departureHub || !leg.arrivalHub || !leg.departureAt || !leg.arrivalAt));
+      if (incompleteLeg) throw Error(`请补全${incompleteLeg.fromCity}到${incompleteLeg.toCity}的站点与预计时间`);
+      (body as Record<string, unknown>).bookedHotels = bookedHotels.filter(hotel => hotel.city && hotel.name.trim()).map(hotel => ({ ...hotel, ...hotel.verified, verified: undefined }));
+      (body as Record<string, unknown>).intercityLegs = intercityLegs.map(leg => ({ ...leg, departureAt: leg.departureAt ? new Date(leg.departureAt).toISOString() : undefined, arrivalAt: leg.arrivalAt ? new Date(leg.arrivalAt).toISOString() : undefined }));
+      (body as Record<string, unknown>).transport = body.localTransport;
       const response = await fetch('/api/discover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await response.json(); if (!response.ok) throw Error(json.error);
       setDiscovery(json); setSelectedIds([]); setPlan(null); setCandidateExpanded(true);
@@ -95,10 +114,10 @@ export default function Home() {
           <div className="section-head"><div><h2>先定下基本行程</h2><p>填完这些，就可以开始发现地点。</p></div><small>方案暂存 30 分钟，可继续换店调整</small></div>
           <form className="planner-form" onSubmit={submit}>
             <div className="quick-grid">
-              <label>出发地<input required name="origin" placeholder="城市、车站或具体地址" defaultValue="上海" maxLength={60} /></label>
+              <label>出发地<input required name="origin" placeholder="城市、车站或具体地址" value={origin} onChange={event => setOrigin(event.target.value)} maxLength={60} /></label>
               <div className="destination-field"><span className="field-label">目的地（可多选）</span><CityMultiSelect value={destinations} onChange={value => { setDestinations(value); setBookedHotels(current => current.filter(hotel => value.includes(hotel.city))); }} /></div>
-              <label>出发日期<input required type="date" name="startDate" defaultValue={today} /></label>
-              <label>旅行天数<input required type="number" name="days" min="1" max="10" defaultValue="2" /></label>
+              <label>出发日期<input required type="date" name="startDate" value={tripStartDate} onChange={event => setTripStartDate(event.target.value)} /></label>
+              <label>旅行天数<input required type="number" name="days" min="1" max="10" value={tripDays} onChange={event => setTripDays(Number(event.target.value))} /></label>
               <label>出行人数<input required type="number" name="travelers" min="1" max="8" defaultValue="2" /></label>
             </div>
             <details className="advanced-planning">
@@ -107,23 +126,13 @@ export default function Home() {
                 <div className="grid compact-grid">
                   <label>旅行预算（元）<input required type="number" name="budget" min="500" max="1000000" defaultValue="4000" /></label>
                   <label>预算口径<select name="budgetBasis"><option value="group">全员总预算</option><option value="person">人均总预算</option></select></label>
-                  <label>主要交通<select name="transport"><option value="walk">步行优先</option><option value="transit">公共交通</option><option value="drive">驾车/打车</option></select></label>
+                  <label>市内交通<select name="localTransport"><option value="walk">步行优先</option><option value="transit">公共交通</option><option value="drive">驾车/打车</option></select></label>
                 </div>
                 <div className="grid preference-grid">
                   <label>旅行偏好<textarea name="preferences" placeholder="如：西湖、茶文化、慢节奏" maxLength={300} /></label>
                   <label>旅行限制<textarea name="constraints" placeholder="如：避免高强度徒步、不安排夜间行程" maxLength={300} /></label>
                 </div>
-                <details className="booked-hotel-input"><summary>添加已预订酒店（可选）</summary><p className="form-help">酒店会先通过高德核验，再作为对应日期每天的实际起点或终点。</p>
-                  <div className="hotel-list">{bookedHotels.map((hotel, index) => <div className="hotel-row" key={index}>
-                    <label>城市<select aria-label={`酒店 ${index + 1} 城市`} value={hotel.city} onChange={event => setBookedHotels(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, city: event.target.value } : item))}>{destinations.map(city => <option key={city}>{city}</option>)}</select></label>
-                    <label>酒店正式名称<input aria-label={`酒店 ${index + 1} 名称`} value={hotel.name} onChange={event => setBookedHotels(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} maxLength={120} placeholder="如：杭州西湖希尔顿嘉悦里酒店" /></label>
-                    <label>地址或分店提示<input aria-label={`酒店 ${index + 1} 地址`} value={hotel.addressHint} onChange={event => setBookedHotels(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, addressHint: event.target.value } : item))} maxLength={160} placeholder="可选，用于同名酒店消歧" /></label>
-                    <label>入住<input aria-label={`酒店 ${index + 1} 入住日期`} type="date" value={hotel.checkIn} onChange={event => setBookedHotels(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, checkIn: event.target.value } : item))} /></label>
-                    <label>退房<input aria-label={`酒店 ${index + 1} 退房日期`} type="date" value={hotel.checkOut} onChange={event => setBookedHotels(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, checkOut: event.target.value } : item))} /></label>
-                    <button type="button" className="text-button" onClick={() => setBookedHotels(current => current.filter((_, itemIndex) => itemIndex !== index))}>删除</button>
-                  </div>)}</div>
-                  <button type="button" className="hotel-add secondary" disabled={!destinations.length || bookedHotels.length >= 10} onClick={() => setBookedHotels(current => [...current, { city: destinations[0], name: '', addressHint: '', checkIn: today, checkOut: tomorrow }])}>添加一家已订酒店</button>
-                </details>
+                <TravelAnchors destinations={destinations} hotels={bookedHotels} onHotelsChange={setBookedHotels} legs={intercityLegs} onLegsChange={setIntercityLegs} startDate={tripStartDate} endDate={tripEndDate} />
                 <fieldset><legend>把美食安排进路线</legend><div className="grid compact-grid">
                   <label>餐饮偏好<input name="foodPreferences" placeholder="如：杭帮菜、面食、清淡" maxLength={300} /></label>
                   <label>饮食禁忌 / 过敏<input name="dietary" placeholder="如：不吃牛肉、花生过敏" maxLength={200} /></label>

@@ -1,7 +1,8 @@
 export type ReservationInfo = { status: 'required' | 'recommended' | 'not_required' | 'unknown'; message: string; sourceUrl?: string | null; queriedAt: string };
 export type Stop = { id: string; poiId?: string; city: string; kind?: 'attraction' | 'entertainment'; period?: 'morning' | 'afternoon' | 'evening'; time: string; name: string; address: string; detail: string; duration: string; durationMinutes?: number; cost: number; costPending?: boolean; indoor: boolean; lng: number; lat: number; verified: boolean; navigationUrl?: string | null; imageUrl?: string | null; imageAttribution?: import('./web-images.mjs').ImageAttribution | null; reservation?: ReservationInfo };
 export type BookedHotel = { id: string; poiId: string; city: string; name: string; addressHint: string; address: string; checkIn: string; checkOut: string; lng: number; lat: number; verified: true; navigationUrl?: string | null };
-export type Day = { title: string; city: string; date: string; stops: Stop[]; startHotel?: BookedHotel | null; endHotel?: BookedHotel | null; warning?: string };
+export type TravelHub = { poiId: string; city: string; name: string; address: string; lng: number; lat: number; kind: 'station' | 'airport'; time?: string; tripNo?: string; navigationUrl?: string | null };
+export type Day = { title: string; city: string; date: string; stops: Stop[]; startHotel?: BookedHotel | null; endHotel?: BookedHotel | null; startHub?: TravelHub | null; endHub?: TravelHub | null; warning?: string };
 const cities: Record<string, Omit<Stop, 'id' | 'city' | 'time' | 'detail' | 'duration' | 'cost'>[]> = {
   北京: [
     { name: '故宫博物院', address: '北京市东城区景山前街4号', indoor: true, lng: 116.397, lat: 39.918, verified: false },

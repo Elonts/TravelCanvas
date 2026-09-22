@@ -61,10 +61,29 @@
 .candidate-summary h2 { margin: 5px 0; font-size: 20px; }
 .candidate-summary p { margin: 0; color: var(--muted); font-size: 12px; }
 .candidate-summary button { flex: 0 0 auto; width: auto; }
-.booked-hotel-input { padding: 12px 0; border-top: 1px solid var(--line); }
-.booked-hotel-input .hotel-list { display: grid; gap: 10px; margin: 12px 0; }
-.booked-hotel-input .hotel-row { display: grid; grid-template-columns: .7fr 1.3fr 1.3fr .8fr .8fr auto; gap: 8px; align-items: end; padding: 10px; background: #f2f4ef; border-radius: 8px; }
-.booked-hotel-input .hotel-add { width: auto; }
+.travel-anchor-editor { display: grid; gap: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.anchor-block { display: grid; gap: 11px; }
+.anchor-heading { display: flex; gap: 12px; align-items: start; justify-content: space-between; }
+.anchor-heading p, .anchor-empty { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.anchor-heading button, .anchor-actions button { width: auto; }
+.hotel-editor, .intercity-editor { display: grid; gap: 11px; padding: 13px; background: #f2f4ef; border: 1px solid #dce3d9; border-radius: 9px; }
+.hotel-editor-main { display: grid; grid-template-columns: minmax(110px, .6fr) minmax(220px, 2fr); gap: 9px; }
+.hotel-editor-details { display: grid; grid-template-columns: minmax(220px, 2fr) minmax(130px, 1fr) minmax(130px, 1fr); gap: 9px; }
+.hotel-name-field, .hotel-address-field { min-width: 0; }
+.anchor-actions { display: flex; gap: 14px; align-items: center; }
+.verified-place { margin: 0; padding: 9px 10px; color: var(--green); font-size: 12px; line-height: 1.55; background: #e3eee7; border-radius: 7px; }
+.place-candidates { display: grid; gap: 6px; }
+.place-candidates button { display: grid; width: 100%; padding: 9px 10px; color: var(--ink); text-align: left; background: #fff; border: 1px solid var(--line); }
+.place-candidates button:hover, .place-candidates button:focus-visible { border-color: var(--green); }
+.place-candidates span { margin-top: 2px; color: var(--muted); font-size: 11px; }
+.intercity-title { display: flex; gap: 12px; align-items: end; justify-content: space-between; }
+.intercity-title label { width: min(170px, 45%); }
+.hub-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.hub-picker { display: grid; gap: 7px; min-width: 0; padding: 10px; background: #fffdf8; border-radius: 7px; }
+.hub-picker > span { font-size: 12px; font-weight: 700; }
+.hub-picker > button { width: auto; justify-self: start; }
+.intercity-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.intercity-times label:last-child { grid-column: 1 / -1; }
 .candidate-warnings { margin: 12px 0 0; }
 .candidate-warnings p { color: var(--muted); font-size: 12px; }
 .candidate-city { padding: 22px 0; border-bottom: 1px solid var(--line); }
@@ -128,7 +147,8 @@
 .preference-checks input { width: auto; }
 
 @media (max-width: 760px) {
-  .booked-hotel-input .hotel-row { grid-template-columns: 1fr; }
+  .hotel-editor-main, .hotel-editor-details, .hub-grid, .intercity-times { grid-template-columns: 1fr; }
+  .intercity-times label:last-child { grid-column: auto; }
   .destination-field { grid-column: auto; }
   .city-groups section > div { grid-template-columns: repeat(3, 1fr); }
   .route-map { padding: 13px; }
