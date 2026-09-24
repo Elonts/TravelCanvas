@@ -31,7 +31,7 @@ export type MealSlot = {
 };
 export type MealOption = {
   restaurant: Restaurant; route: RouteLeg[]; direct: RouteLeg | null;
-  extraMinutes: number | null; extraFare: number | null;
+  extraMinutes: number | null; extraMeters: number | null; extraFare: number | null;
   totalLow: number | null; totalHigh: number | null; arrival: number | null;
   finish: number | null; eligible: boolean; reasons: string[]; pending: string[];
   canAcceptPending: boolean; hardBlocked: boolean;
@@ -44,7 +44,12 @@ export type ManualRestaurantDecision = {
   input: string;
   status: 'needs_branch' | 'scheduled_draft' | 'needs_risk_confirmation' | 'unassigned' | 'explicitly_skipped' | 'finalized';
   restaurantId?: string; matchedName?: string; address?: string;
-  candidates?: { restaurantId: string; name: string; address: string }[];
+  candidates?: {
+    restaurantId: string; name: string; address: string; restaurant: Restaurant;
+    mealId: string | null; mealLabel: string | null; dayIndex: number | null;
+    routeMeters: number | null; extraMeters: number | null; extraMinutes: number | null; extraFare: number | null;
+    reasons: string[]; pending: string[]; hardBlocked: boolean; replacesRestaurantName: string | null; recommended: boolean;
+  }[];
   mealId?: string; mealLabel?: string; dayIndex?: number; extraMinutes?: number | null;
   reasons: string[];
 };

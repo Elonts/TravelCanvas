@@ -83,15 +83,23 @@ for (const mode of ['fixtures', 'offline']) {
     assert.equal(plan.route.points.some(point => point.kind === 'restaurant'), false);
     const ambiguousFood = await post('/api/plan/restaurants', { planId: plan.planId, revision: plan.revision, names: ['测试'] });
     assert.equal(ambiguousFood.status, 200, JSON.stringify(ambiguousFood.value)); plan = ambiguousFood.value;
-    assert.equal(plan.food.manualRestaurants.find(item => item.input === '测试').status, 'needs_branch');
+    const ambiguousDecision = plan.food.manualRestaurants.find(item => item.input === '测试');
+    assert.equal(ambiguousDecision.status, 'needs_branch');
+    assert.ok(ambiguousDecision.candidates.length > 1);
+    assert.ok(ambiguousDecision.candidates.every(candidate => 'extraMeters' in candidate && 'extraMinutes' in candidate));
     const blockedFinalize = await post('/api/plan/finalize-food', { planId: plan.planId, revision: plan.revision, selections: plan.food.meals.map(meal => ({ mealId: meal.slot.id, restaurantId: meal.draftSelectedId, acceptWarnings: true })) });
-    assert.equal(blockedFinalize.status, 422); assert.match(blockedFinalize.value.error, /指定餐厅.*尚未安排/);
-    const finalized = await post('/api/plan/finalize-food', { planId: plan.planId, revision: plan.revision, selections: plan.food.meals.map(meal => ({ mealId: meal.slot.id, restaurantId: meal.draftSelectedId, acceptWarnings: true })), skippedManualInputs: ['测试'] });
+    assert.equal(blockedFinalize.status, 422); assert.match(blockedFinalize.value.error, /指定餐厅.*(?:尚未安排|没有进入任何餐次)/);
+    const recommendedBranch = ambiguousDecision.candidates.find(candidate => candidate.recommended);
+    assert.ok(recommendedBranch?.mealId, JSON.stringify(ambiguousDecision));
+    const selectedBranch = await post('/api/plan/restaurants', { planId: plan.planId, revision: plan.revision, manualInput: '测试', restaurantId: recommendedBranch.restaurantId, mealId: recommendedBranch.mealId });
+    assert.equal(selectedBranch.status, 200, JSON.stringify(selectedBranch.value)); plan = selectedBranch.value;
+    assert.notEqual(plan.food.manualRestaurants.find(item => item.input === '测试').status, 'needs_branch');
+    const finalized = await post('/api/plan/finalize-food', { planId: plan.planId, revision: plan.revision, selections: plan.food.meals.map(meal => ({ mealId: meal.slot.id, restaurantId: meal.draftSelectedId, acceptWarnings: true })) });
     assert.equal(finalized.status, 200, JSON.stringify(finalized.value));
     plan = finalized.value;
     assert.equal(plan.phase, 'final');
     assert.ok(plan.route.points.some(point => point.kind === 'restaurant'));
-    assert.equal(plan.food.manualRestaurants.find(item => item.input === '测试').status, 'explicitly_skipped');
+    assert.equal(plan.food.manualRestaurants.find(item => item.input === '测试').status, 'finalized');
     mealId = plan.food.meals.find(meal => meal.selectedId).slot.id;
     if (plan.food.meals.find(meal => meal.slot.id === mealId).locked) {
       const unlockedDraft = await post('/api/food', { planId: plan.planId, revision: plan.revision, mealId, action: 'lock' });

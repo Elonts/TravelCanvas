@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { allocateBudget, asDraftFood, changeDraftMeal, createMealSlots, evaluateRestaurant, isOpenDuring, changeMeal, summarizeFood, shortlistRestaurants } from '../lib/food.mjs';
-import { requestSchema, dayReplanSchema, readJson } from '../lib/requests.mjs';
+import { requestSchema, restaurantSearchSchema, dayReplanSchema, readJson } from '../lib/requests.mjs';
 import { PlanStore } from '../lib/plan-store.mjs';
 
 const request = requestSchema.parse({ origin: '上海', destinations: ['杭州'], startDate: '2026-09-10', days: 1, budget: 4000, travelers: 2, transport: 'walk' });
@@ -34,8 +34,15 @@ test('budget transport cap follows selected mode and one-day trips do not reserv
   assert.ok(walk.remaining > 0 && !('buffer' in walk));
 });
 test('uses directed route insertion delta and multiplies food cost by travelers', () => {
-  assert.equal(option.extraMinutes, 10); assert.equal(option.totalHigh, 120); assert.equal(option.eligible, true);
+  assert.equal(option.extraMinutes, 10); assert.equal(option.extraMeters, 500); assert.equal(option.totalHigh, 120); assert.equal(option.eligible, true);
   assert.equal(evaluate(restaurant, slot, request, [leg(3), leg(3)], leg(10)).extraMinutes, 0);
+});
+test('restaurant endpoint accepts either names or a server-issued branch selection shape', () => {
+  const base = { planId: '00000000-0000-4000-8000-000000000000', revision: 2 };
+  assert.equal(restaurantSearchSchema.safeParse({ ...base, names: ['测试餐厅'] }).success, true);
+  assert.equal(restaurantSearchSchema.safeParse({ ...base, manualInput: '测试', restaurantId: 'poi-1', mealId: 'meal-1' }).success, true);
+  assert.equal(restaurantSearchSchema.safeParse({ ...base, manualInput: '测试', restaurantId: 'forged' }).success, false);
+  assert.equal(restaurantSearchSchema.safeParse({ ...base, names: ['测试餐厅'], cookie: 'secret' }).success, false);
 });
 test('hard caps cannot be overridden by food-first ranking', () => {
   assert.match(evaluate(restaurant, { ...slot, foodLimit: 100 }).reasons.join(), /预算/);

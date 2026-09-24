@@ -9,7 +9,10 @@ import { TransitDetails } from './transit-details';
 
 export type MealAction = (mealId: string, action: 'lock' | 'cheaper' | 'closer' | 'select' | 'selectAndLock' | 'skip' | 'move', restaurantId?: string) => void;
 export type RestaurantSearchAction = (names: string[], mealId?: string) => Promise<void>;
+export type RestaurantBranchAction = (manualInput: string, restaurantId: string, mealId: string) => Promise<void>;
+export type FoodBlocker = { id: string; message: string; targetId: string };
 const stamp = (value: string) => new Date(value).toLocaleString('zh-CN');
+const distance = (meters: number | null) => meters === null ? '道路距离待确认' : `道路约 ${Math.round(meters / 100) / 10} 公里`;
 
 export function SourceTip({ tip, food }: { tip: EvidenceTip; food: FoodPlan }) {
   const source = food.sources.find(s => s.id === tip.sourceId);
@@ -61,7 +64,7 @@ export function MealCard({ meal, food, busy, draftMode = false, warningAccepted 
   const pending = meal.options.filter(o => !o.eligible);
   const visibleSuggestions = !selected ? pending.filter(o => !used.has(o.restaurant.id)).slice(0, 2) : [];
   const remainingPending = pending.filter(o => !visibleSuggestions.includes(o));
-  return <section className="meal" aria-label={`${meal.slot.date}${meal.slot.label}`}>
+  return <section id={`food-risk-${encodeURIComponent(meal.slot.id)}`} tabIndex={-1} className="meal" aria-label={`${meal.slot.date}${meal.slot.label}`}>
     <div className="meal-heading"><div><span className="eyebrow">本次行程推荐 · {meal.slot.label}</span><h3>{meal.slot.previous.name}之后，安排一顿好饭</h3></div>{meal.locked && <span className="lock-badge">已锁定</span>}</div>
     <p className="meal-context">{clockTime(meal.slot.earliest)}–{clockTime(meal.slot.latest)} · 全员本餐上限 ¥{meal.slot.foodLimit} · 新增交通预留 ¥{meal.slot.transportLimit}<br />{meal.slot.next ? `下一站：${meal.slot.next.name}（${meal.slot.next.time}）` : '当天最后一站后用餐，未计返回酒店行程'}</p>
     {selected ? <RestaurantOption option={selected} food={food} label={draftMode ? '餐厅草稿 · 尚未写入路线' : selected.restaurant.preferred ? '用户已选餐厅 · 已放入路线' : '主选餐厅'}>
@@ -81,16 +84,35 @@ export function MealCard({ meal, food, busy, draftMode = false, warningAccepted 
 
 const manualStatus: Record<string, string> = { needs_branch: '需要确认具体分店', scheduled_draft: '已加入餐厅草稿', needs_risk_confirmation: '已安排，需确认风险', unassigned: '暂未安排', explicitly_skipped: '已明确跳过', finalized: '已进入最终路线' };
 
-export function FoodDraftControls({ food, busy, canFinalize, skippedManualInputs, onSkippedChange, onSearch, onFinalize }: { food: FoodPlan; busy: boolean; canFinalize: boolean; skippedManualInputs: Set<string>; onSkippedChange: (input: string, skipped: boolean) => void; onSearch: RestaurantSearchAction; onFinalize: () => Promise<void> }) {
+export function FoodDraftControls({ food, busy, blockers, skippedManualInputs, onSkippedChange, onSearch, onSelectBranch, onFinalize }: { food: FoodPlan; busy: boolean; blockers: FoodBlocker[]; skippedManualInputs: Set<string>; onSkippedChange: (input: string, skipped: boolean) => void; onSearch: RestaurantSearchAction; onSelectBranch: RestaurantBranchAction; onFinalize: () => Promise<void> }) {
   const [value, setValue] = useState('');
+  const [blockerAlert, setBlockerAlert] = useState('');
   const names = parsePlaceNames(value).slice(0, 8);
+  const finalize = async () => {
+    if (blockers.length) {
+      setBlockerAlert(`还有 ${blockers.length} 项需要处理：${blockers[0].message}`);
+      const target = document.getElementById(blockers[0].targetId);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target?.focus({ preventScroll: true });
+      return;
+    }
+    setBlockerAlert('');
+    await onFinalize();
+  };
   return <section className="food-draft-controls">
     <div className="custom-restaurant-search"><label>还想吃其他餐厅？可一次输入多家<textarea rows={3} value={value} onChange={event => setValue(event.target.value)} placeholder="例如：楼外楼孤山店、知味观湖滨店（支持顿号、逗号或换行）" /></label><div><small>系统会核验具体分店，并建议最顺路的日期和餐次；超过绕路上限会醒目标记。</small><button type="button" className="secondary" disabled={busy || !names.length} onClick={async () => { await onSearch(names); setValue(''); }}>核验并加入草稿{names.length ? `（${names.length}）` : ''}</button></div></div>
     {!!food.manualRestaurants?.length && <div className="manual-restaurant-status" aria-label="指定餐厅处理结果"><h3>指定餐厅处理结果</h3><p>每家餐厅都必须进入某个餐次，或由你明确跳过；系统不会再静默忽略。</p>{food.manualRestaurants.map(decision => {
       const unresolved = ['needs_branch', 'unassigned'].includes(decision.status);
-      return <div className={`manual-restaurant-row ${unresolved ? 'needs-action' : ''}`} key={decision.input}><div><b>{decision.matchedName || decision.input}</b><span>{manualStatus[decision.status] || decision.status}</span>{decision.mealLabel && <small>建议：{decision.mealLabel}{decision.extraMinutes !== null && decision.extraMinutes !== undefined ? ` · 新增约 ${decision.extraMinutes} 分钟` : ''}</small>}{decision.address && <small>{decision.address}</small>}{decision.reasons.map(reason => <small key={reason}>{reason}</small>)}{!!decision.candidates?.length && <small>可选分店：{decision.candidates.map(candidate => `${candidate.name}（${candidate.address}）`).join('、')}</small>}</div>{unresolved && <label className="risk-confirm"><input type="checkbox" checked={skippedManualInputs.has(decision.input)} onChange={event => onSkippedChange(decision.input, event.target.checked)} />本次明确不安排</label>}</div>;
+      const targetId = `manual-restaurant-${encodeURIComponent(decision.input)}`;
+      return <div id={targetId} tabIndex={-1} className={`manual-restaurant-row ${unresolved ? 'needs-action' : ''}`} key={decision.input}><div><b>{decision.matchedName || decision.input}</b><span>{manualStatus[decision.status] || decision.status}</span>{decision.mealLabel && <small>建议：{decision.mealLabel}{decision.extraMinutes !== null && decision.extraMinutes !== undefined ? ` · 新增约 ${decision.extraMinutes} 分钟` : ''}</small>}{decision.address && <small>{decision.address}</small>}{decision.reasons.map(reason => <small key={reason}>{reason}</small>)}{!!decision.candidates?.length && <div className="branch-candidates" aria-label={`${decision.input}的分店候选`}>{decision.candidates.map(candidate => <article className={`branch-candidate ${candidate.recommended ? 'recommended' : ''}`} key={candidate.restaurantId}>
+        <div><b>{candidate.name}{candidate.recommended && <span className="lock-badge">推荐分店</span>}</b><small>{candidate.address}</small></div>
+        <div className="branch-metrics"><span>{candidate.mealLabel ? `建议 ${candidate.mealLabel}` : '没有可用餐次'}</span><span>{distance(candidate.routeMeters)}</span><span>{candidate.extraMeters === null ? '新增距离待确认' : `新增 ${Math.round(candidate.extraMeters / 100) / 10} 公里`}</span><span>{candidate.extraMinutes === null ? '新增时间待确认' : `新增约 ${candidate.extraMinutes} 分钟`}</span><span>{candidate.extraFare === null ? '交通费待确认' : `新增交通约 ¥${candidate.extraFare}`}</span></div>
+        {candidate.replacesRestaurantName && <small>选择后将替换：{candidate.replacesRestaurantName}</small>}
+        {[...candidate.reasons, ...candidate.pending].map(reason => <small className="constraint-note" key={reason}>{reason}</small>)}
+        <button type="button" className="secondary" disabled={busy || candidate.hardBlocked || !candidate.mealId} onClick={() => candidate.mealId && onSelectBranch(decision.input, candidate.restaurantId, candidate.mealId)}>{candidate.hardBlocked || !candidate.mealId ? '当前无法安排' : candidate.replacesRestaurantName ? '替换当前餐厅' : '选择这个分店'}</button>
+      </article>)}</div>}</div>{unresolved && <label className="risk-confirm"><input type="checkbox" checked={skippedManualInputs.has(decision.input)} onChange={event => onSkippedChange(decision.input, event.target.checked)} />本次明确不安排</label>}</div>;
     })}</div>}
-    <div className="finalize-food"><div><b>餐厅确认前，地图仍保持酒店、站点和景点基础路线</b><p>确认后才会重新计算交通、时间和预算。指定餐厅必须已安排或明确跳过。</p></div><button type="button" disabled={busy || !canFinalize} onClick={onFinalize}>{busy ? '正在生成最终路线…' : '确认餐厅并生成最终路线 →'}</button></div>
+    <div className="finalize-food"><div><b>餐厅确认前，地图仍保持酒店、站点和景点基础路线</b><p>确认后才会重新计算交通、时间和预算。指定餐厅必须已安排或明确跳过。</p>{!!blockers.length && <div className="food-blockers"><b>生成前还需处理：</b><ul>{blockers.map(blocker => <li key={blocker.id}>{blocker.message}</li>)}</ul></div>}{blockerAlert && <p className="error" role="alert">{blockerAlert}</p>}</div><button type="button" disabled={busy} onClick={finalize}>{busy ? '正在生成最终路线…' : '确认餐厅并生成最终路线 →'}</button></div>
   </section>;
 }
 

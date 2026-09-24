@@ -2,7 +2,7 @@
 
 import { FormEvent, Fragment, useEffect, useState } from 'react';
 import type { EntertainmentSelection, Plan } from '../lib/plan';
-import { FoodDraftControls, FoodSummary, MealCard, SourceTip, type MealAction, type RestaurantSearchAction } from './food-view';
+import { FoodDraftControls, FoodSummary, MealCard, SourceTip, type FoodBlocker, type MealAction, type RestaurantBranchAction, type RestaurantSearchAction } from './food-view';
 import { CityMultiSelect } from './city-multi-select';
 import { JourneyCanvas } from './journey-canvas';
 import { CandidatePicker } from './candidate-picker';
@@ -106,11 +106,19 @@ export default function Home() {
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
     } catch (e) { setChangeError(userFacingRequestError(e, '餐厅查询失败')); } finally { setChanging(false); }
   };
+  const selectRestaurantBranch: RestaurantBranchAction = async (manualInput, restaurantId, mealId) => {
+    if (!plan || changing || loading) return;
+    setChanging(true); setChangeError('');
+    try {
+      const response = await fetch('/api/plan/restaurants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, manualInput, restaurantId, mealId }) });
+      const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
+    } catch (e) { setChangeError(userFacingRequestError(e, '分店选择失败')); } finally { setChanging(false); }
+  };
   const finalizeFood = async (acceptedWarnings: Set<string>, skippedManualInputs: Set<string>) => {
     if (!plan || changing || loading) return;
     setChanging(true); setChangeError('');
     try {
-      const selections = plan.food.meals.map(meal => ({ mealId: meal.slot.id, restaurantId: meal.draftSelectedId || null, acceptWarnings: acceptedWarnings.has(meal.slot.id) }));
+      const selections = plan.food.meals.map(meal => ({ mealId: meal.slot.id, restaurantId: meal.draftSelectedId || null, acceptWarnings: acceptedWarnings.has(`${meal.slot.id}:${meal.draftSelectedId || ''}`) }));
       const response = await fetch('/api/plan/finalize-food', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, selections, skippedManualInputs: [...skippedManualInputs] }) });
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
     } catch (e) { setChangeError(userFacingRequestError(e, '最终路线生成失败')); } finally { setChanging(false); }
@@ -188,13 +196,13 @@ export default function Home() {
         {discovery && (candidateExpanded
           ? <CandidatePicker discovery={discovery} selectedIds={selectedIds} busy={loading} guideBusy={guidesLoading} error={plan ? '' : error} onToggle={toggleCandidate} onGenerate={generatePlan} onAddCustom={addCustomCandidates} onRetryGuides={() => refreshGuides(discovery.discoveryId)} />
           : <section className="candidate-summary panel"><div><span className="eyebrow">02 / 选择想去的地方</span><h2>已收起景区候选</h2><p>已选 {discovery.candidates.filter(candidate => selectedIds.includes(candidate.id) && candidate.kind === 'attraction').length} 个景区。餐厅已按生成后的基础路线另行查询；展开修改景区后需重新生成路线。</p></div><button type="button" className="secondary" onClick={() => setCandidateExpanded(true)}>展开并修改选择</button></section>)}
-        {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} onSearchRestaurants={searchRestaurants} onFinalizeFood={finalizeFood} onSearchEntertainment={searchEntertainment} onReplanDay={replanDay} changeError={changeError} />}
+        {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} onSearchRestaurants={searchRestaurants} onSelectRestaurantBranch={selectRestaurantBranch} onFinalizeFood={finalizeFood} onSearchEntertainment={searchEntertainment} onReplanDay={replanDay} changeError={changeError} />}
       </div>}
     </section>
   </main>;
 }
 
-function PlanView({ plan, busy, onAction, onSearchRestaurants, onFinalizeFood, onSearchEntertainment, onReplanDay, changeError }: { plan: Plan; busy: boolean; onAction: MealAction; onSearchRestaurants: RestaurantSearchAction; onFinalizeFood: (acceptedWarnings: Set<string>, skippedManualInputs: Set<string>) => Promise<void>; onSearchEntertainment: (dayIndex: number, preference: string, query: string, anchorPointId: string, position: 'before' | 'after', selectedIds: string[]) => Promise<void>; onReplanDay: (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentSelections: EntertainmentSelection[]) => Promise<void>; changeError: string }) {
+function PlanView({ plan, busy, onAction, onSearchRestaurants, onSelectRestaurantBranch, onFinalizeFood, onSearchEntertainment, onReplanDay, changeError }: { plan: Plan; busy: boolean; onAction: MealAction; onSearchRestaurants: RestaurantSearchAction; onSelectRestaurantBranch: RestaurantBranchAction; onFinalizeFood: (acceptedWarnings: Set<string>, skippedManualInputs: Set<string>) => Promise<void>; onSearchEntertainment: (dayIndex: number, preference: string, query: string, anchorPointId: string, position: 'before' | 'after', selectedIds: string[]) => Promise<void>; onReplanDay: (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentSelections: EntertainmentSelection[]) => Promise<void>; changeError: string }) {
   const [activeDay, setActiveDay] = useState(0);
   const [replacementNames, setReplacementNames] = useState<Record<string, string>>({});
   const [entertainmentSelections, setEntertainmentSelections] = useState<Record<number, EntertainmentSelection[]>>({});
@@ -207,8 +215,11 @@ function PlanView({ plan, busy, onAction, onSearchRestaurants, onFinalizeFood, o
   const [skippedManualRestaurants, setSkippedManualRestaurants] = useState<Set<string>>(new Set());
   useEffect(() => {
     setReplacementNames({});
-    setAcceptedFoodWarnings(new Set());
-    setSkippedManualRestaurants(new Set(plan.food.manualRestaurants?.filter(item => item.status === 'explicitly_skipped').map(item => item.input) || []));
+    const validWarningKeys = new Set(plan.food.meals.flatMap(meal => meal.draftSelectedId ? [`${meal.slot.id}:${meal.draftSelectedId}`] : []));
+    setAcceptedFoodWarnings(current => new Set([...current].filter(key => validWarningKeys.has(key))));
+    const validInputs = new Set(plan.food.manualRestaurants?.map(item => item.input) || []);
+    const serverSkipped = new Set(plan.food.manualRestaurants?.filter(item => item.status === 'explicitly_skipped').map(item => item.input) || []);
+    setSkippedManualRestaurants(current => new Set([...current, ...serverSkipped].filter(input => validInputs.has(input))));
   }, [plan.planId, plan.revision]);
   const total = Object.values(plan.budget).reduce((a, b) => a + b, 0);
   const labels: Record<string, string> = { transport: '交通建议上限', stay: '住宿建议上限', food: '餐饮建议上限', activities: '景点与娱乐建议上限', remaining: '剩余可用预算（未安排）' };
@@ -231,10 +242,16 @@ function PlanView({ plan, busy, onAction, onSearchRestaurants, onFinalizeFood, o
   const selectedEntertainment = entertainmentSelection.map(selection => ({ selection, option: entertainment?.options.find(option => option.id === selection.id) })).filter(item => item.option);
   const draftMeals = plan.food.meals.filter(meal => meal.draftSelectedId);
   const unresolvedManualRestaurants = (plan.food.manualRestaurants || []).filter(item => ['needs_branch', 'unassigned'].includes(item.status) && !skippedManualRestaurants.has(item.input));
-  const canFinalizeFood = (plan.phase !== 'food_selection' || unresolvedManualRestaurants.length === 0) && draftMeals.every(meal => {
-    const selected = meal.options.find(option => option.restaurant.id === meal.draftSelectedId);
-    return !selected?.reasons.length || acceptedFoodWarnings.has(meal.slot.id);
-  });
+  const foodBlockers: FoodBlocker[] = [
+    ...unresolvedManualRestaurants.map(item => ({ id: `manual:${item.input}`, message: `“${item.input}”${item.status === 'needs_branch' ? '尚未确认具体分店' : '尚未安排或明确跳过'}`, targetId: `manual-restaurant-${encodeURIComponent(item.input)}` })),
+    ...draftMeals.flatMap(meal => {
+      const selected = meal.options.find(option => option.restaurant.id === meal.draftSelectedId);
+      const key = `${meal.slot.id}:${meal.draftSelectedId || ''}`;
+      return selected?.reasons.length && !acceptedFoodWarnings.has(key)
+        ? [{ id: `risk:${key}`, message: `${meal.slot.date} ${meal.slot.label}的“${selected.restaurant.name}”还有绕路、预算或时间风险待确认`, targetId: `food-risk-${encodeURIComponent(meal.slot.id)}` }]
+        : [];
+    }),
+  ];
   const addEntertainment = () => {
     if (!venueChoice) return;
     setEntertainmentSelections(current => {
@@ -266,7 +283,7 @@ function PlanView({ plan, busy, onAction, onSearchRestaurants, onFinalizeFood, o
           {stop.navigationUrl && <a className="nav-link" href={stop.navigationUrl} target="_blank" rel="noreferrer">在高德地图打开并导航 →</a>}
           {plan.food.tips.filter(tip => tip.placeName === stop.name).map(tip => <SourceTip key={tip.id} tip={tip} food={plan.food} />)}
         </div><b>{stop.costPending ? '费用待确认' : `约 ¥${stop.cost}`}</b></div>
-        {plan.food.meals.filter(meal => meal.slot.dayIndex === dayIndex && meal.slot.previous.id === stop.id).map(meal => <MealCard key={meal.slot.id} meal={meal} food={plan.food} busy={busy} draftMode={plan.phase === 'food_selection'} warningAccepted={acceptedFoodWarnings.has(meal.slot.id)} onWarningAccepted={accepted => setAcceptedFoodWarnings(current => { const next = new Set(current); if (accepted) next.add(meal.slot.id); else next.delete(meal.slot.id); return next; })} onAction={onAction} onSearch={onSearchRestaurants} />)}
+        {plan.food.meals.filter(meal => meal.slot.dayIndex === dayIndex && meal.slot.previous.id === stop.id).map(meal => { const warningKey = `${meal.slot.id}:${meal.draftSelectedId || ''}`; return <MealCard key={meal.slot.id} meal={meal} food={plan.food} busy={busy} draftMode={plan.phase === 'food_selection'} warningAccepted={acceptedFoodWarnings.has(warningKey)} onWarningAccepted={accepted => setAcceptedFoodWarnings(current => { const next = new Set(current); if (accepted) next.add(warningKey); else next.delete(warningKey); return next; })} onAction={onAction} onSearch={onSearchRestaurants} />; })}
       </Fragment>)}
       {plan.phase === 'food_selection' ? <div className="day-editor pending-editor"><span className="eyebrow">顺路娱乐活动</span><p>请先确认餐厅生成最终路线，再选择娱乐活动放在哪个行程点之前或之后。</p></div> : <div className="day-editor"><span className="eyebrow">顺路娱乐活动</span><p>先选择当天行程点和前后关系，再查找道路距离 15 公里以内、插入路线更省时的具体地点。</p>
         <div className="entertainment-anchor"><label>安排在<select aria-label="娱乐活动锚点" value={entertainmentAnchorId} onChange={event => { const point = entertainmentAnchors.find(item => item.id === event.target.value); setEntertainmentAnchorIds(current => ({ ...current, [activeDay]: event.target.value })); setEntertainmentPositions(current => ({ ...current, [activeDay]: point?.hotelRole === 'end' ? 'before' : 'after' })); setVenueChoices(current => ({ ...current, [activeDay]: '' })); }}><option value="">请选择当天行程</option>{entertainmentAnchors.map(point => <option key={point.id} value={point.id}>{point.time} · {point.name}{point.kind === 'hotel' ? '（酒店）' : point.kind === 'restaurant' ? '（餐厅）' : ''}</option>)}</select></label><label>相对位置<select aria-label="娱乐活动相对位置" value={entertainmentPosition} onChange={event => { setEntertainmentPositions(current => ({ ...current, [activeDay]: event.target.value as 'before' | 'after' })); setVenueChoices(current => ({ ...current, [activeDay]: '' })); }}>{entertainmentAnchor?.hotelRole !== 'end' && <option value="after">这个行程之后</option>}{!['start', 'arrival'].includes(entertainmentAnchor?.hotelRole || '') && <option value="before">这个行程之前</option>}</select></label></div>
@@ -275,7 +292,7 @@ function PlanView({ plan, busy, onAction, onSearchRestaurants, onFinalizeFood, o
         {!!selectedEntertainment.length && <div className="entertainment-draft"><b>当天娱乐草稿</b>{selectedEntertainment.map(({ option, selection }) => option && <div key={option.id}><span>{option.preference} · {option.name} · 安排在 {plan.route.points.find(point => point.id === selection.anchorPointId)?.name || '所选行程'}{selection.position === 'before' ? '之前' : '之后'} · 约增加 {option.insertionExtraMinutes ?? '待确认'} 分钟</span><button type="button" className="text-button" onClick={() => setEntertainmentSelections(current => ({ ...current, [activeDay]: entertainmentSelection.filter(item => item.id !== option.id) }))}>删除</button></div>)}</div>}
         {entertainment?.warning && <p>{entertainment.warning}</p>}<button type="button" disabled={busy || !dayDirty} onClick={() => onReplanDay(activeDay, replacements, entertainmentSelection)}>{busy ? '正在核验地点并重新规划…' : '保存修改并重新规划当天路线'}</button><small>景点替换和娱乐更改会在点击此按钮后一次生效；检索本身不会立即改变路线。</small></div>}
     </article>)}
-      {plan.phase === 'food_selection' && <FoodDraftControls food={plan.food} busy={busy} canFinalize={canFinalizeFood} skippedManualInputs={skippedManualRestaurants} onSkippedChange={(input, skipped) => setSkippedManualRestaurants(current => { const next = new Set(current); if (skipped) next.add(input); else next.delete(input); return next; })} onSearch={onSearchRestaurants} onFinalize={() => onFinalizeFood(acceptedFoodWarnings, skippedManualRestaurants)} />}
+      {plan.phase === 'food_selection' && <FoodDraftControls food={plan.food} busy={busy} blockers={foodBlockers} skippedManualInputs={skippedManualRestaurants} onSkippedChange={(input, skipped) => setSkippedManualRestaurants(current => { const next = new Set(current); if (skipped) next.add(input); else next.delete(input); return next; })} onSearch={onSearchRestaurants} onSelectBranch={onSelectRestaurantBranch} onFinalize={() => onFinalizeFood(acceptedFoodWarnings, skippedManualRestaurants)} />}
       {!!generalTips.length && <div className="card"><span className="eyebrow">攻略参考 · 尚未匹配具体行程地点</span>{generalTips.map(tip => <SourceTip key={tip.id} tip={tip} food={plan.food} />)}</div>}
       {!!plan.guides?.length && <details className="card"><summary>景点排序参考的公开攻略（{plan.guides.length}）</summary><p>以下是 Tavily 公开搜索相关性顺序，不是小红书站内个性化榜单。</p>{plan.guides.map(source => <p key={source.id}><b>{source.city} · 第 {source.rank} 篇</b> · <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> · {source.contentState === 'full' ? '公开正文' : '搜索摘要'} · 查询 {new Date(source.queriedAt).toLocaleString('zh-CN')}</p>)}</details>}
       {!!plan.food.sources.length && <details className="card"><summary>本次攻略来源（{plan.food.sources.length}）</summary>{plan.food.sources.map(source => <p key={source.id}>{source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> : source.title} · {source.kind === 'search' ? '搜索摘要' : '用户提供'} · 发布 {source.publishedAt || '未知'} · 查询 {new Date(source.queriedAt).toLocaleString('zh-CN')}</p>)}</details>}

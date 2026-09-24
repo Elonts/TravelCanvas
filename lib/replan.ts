@@ -56,6 +56,20 @@ export async function routePaths(plan: Plan, points: Plan['route']['points'], ma
   return paths;
 }
 
+function restaurantFromPlace(place: any, preferredMealId?: string): Restaurant {
+  return {
+    id: place.poiId, city: place.city, preferred: true, ...(preferredMealId ? { preferredMealId } : {}),
+    name: place.name, address: place.address, lng: place.lng, lat: place.lat, category: place.category,
+    price: place.price || null, hours: place.hours || '', source: '用户输入 + 高德地图 POI',
+    queriedAt: new Date().toISOString(), imageUrl: place.imageUrl || null,
+    navigationUrl: place.navigationUrl || null, tips: [],
+  };
+}
+
+function draftSummary(food: FoodPlan) {
+  return summarizeFood({ ...food, meals: food.meals.map(meal => ({ ...meal, selectedId: meal.draftSelectedId || null })) });
+}
+
 export async function addRestaurantCandidates(plan: Plan, input: { mealId?: string; names: string[] }): Promise<Plan> {
   const meal = input.mealId ? plan.food.meals.find(item => item.slot.id === input.mealId) : null;
   if (input.mealId && !meal) throw Error('要补充的餐次不存在');
@@ -72,24 +86,40 @@ export async function addRestaurantCandidates(plan: Plan, input: { mealId?: stri
     }
   }
   const matches: any[] = [];
+  const ambiguous: { inputName: string; places: any[] }[] = [];
   const decisions: import('./food-types').ManualRestaurantDecision[] = [];
   for (const [name, candidates] of candidatesByName) {
     if (candidates.length > 1) {
-      decisions.push({ input: name, status: 'needs_branch', candidates: candidates.slice(0, 5).map(candidate => ({ restaurantId: candidate.poiId, name: candidate.name, address: candidate.address })), reasons: ['匹配到多个分店，请输入完整分店名称后重新核验。'] });
+      ambiguous.push({ inputName: name, places: candidates.slice(0, 5) });
       continue;
     }
     if (candidates[0]) matches.push({ ...candidates[0], inputName: name });
     else decisions.push({ input: name, status: 'unassigned', reasons: ['没有在本次目的地中找到可核验的具体餐厅，请检查名称或补充分店。'] });
   }
   const previousDecisions = (plan.food.manualRestaurants || []).filter(item => !input.names.includes(item.input));
-  if (!matches.length) return { ...plan, food: { ...plan.food, manualRestaurants: [...previousDecisions, ...decisions] }, sources: { ...plan.sources, updatedAt: new Date().toISOString() } };
+  const allNewPlaces = [...matches, ...ambiguous.flatMap(item => item.places)];
+  if (!allNewPlaces.length) return { ...plan, food: { ...plan.food, manualRestaurants: [...previousDecisions, ...decisions] }, sources: { ...plan.sources, updatedAt: new Date().toISOString() } };
   const existing = plan.food.meals.flatMap(item => item.options.map(option => option.restaurant));
-  const preferredRestaurants: Restaurant[] = [...existing, ...matches.map((place: any) => ({ id: place.poiId, city: place.city, preferred: true, ...(meal ? { preferredMealId: meal.slot.id } : {}), name: place.name, address: place.address, lng: place.lng, lat: place.lat, category: place.category, price: place.price || null, hours: place.hours || '', source: '用户输入 + 高德地图 POI', queriedAt: new Date().toISOString(), imageUrl: place.imageUrl || null, navigationUrl: place.navigationUrl || null, tips: [] }))];
+  const preferredRestaurants: Restaurant[] = [...existing, ...allNewPlaces.map(place => restaurantFromPlace(place, meal?.slot.id))];
   const generated = await rebuildFoodPlan(plan.request, plan.days, plan.budget, process.env, fetch, { mapIntervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400, preferredRestaurants, discoverySources: null });
+  const newIds = new Set(allNewPlaces.map(place => place.poiId));
+  generated.meals.forEach(candidateMeal => {
+    if (candidateMeal.selectedId && newIds.has(candidateMeal.selectedId)) {
+      candidateMeal.selectedId = null;
+      candidateMeal.locked = false;
+    }
+  });
+  if (plan.phase === 'food_selection') {
+    for (const oldMeal of plan.food.meals) {
+      const target = generated.meals.find(item => item.slot.id === oldMeal.slot.id);
+      if (target && oldMeal.draftSelectedId && target.options.some(option => option.restaurant.id === oldMeal.draftSelectedId)) {
+        target.selectedId = oldMeal.draftSelectedId;
+      }
+    }
+  }
   if (!meal) {
     const claimedMeals = new Set<string>();
     for (const place of matches) {
-      generated.meals.forEach(candidateMeal => { if (candidateMeal.selectedId === place.poiId) { candidateMeal.selectedId = null; candidateMeal.locked = false; } });
       const choices = generated.meals.flatMap(candidateMeal => candidateMeal.options
         .filter(option => option.restaurant.id === place.poiId && !option.hardBlocked)
         .map(option => ({ meal: candidateMeal, option })))
@@ -98,9 +128,53 @@ export async function addRestaurantCandidates(plan: Plan, input: { mealId?: stri
       const best = choices.find(choice => !claimedMeals.has(choice.meal.slot.id));
       if (best) { best.meal.selectedId = place.poiId; best.meal.locked = true; claimedMeals.add(best.meal.slot.id); }
     }
-    generated.summary = summarizeFood(generated);
+  } else {
+    for (const place of matches) {
+      const option = meal.options.find(item => item.restaurant.id === place.poiId)
+        || generated.meals.find(item => item.slot.id === meal.slot.id)?.options.find(item => item.restaurant.id === place.poiId);
+      const target = generated.meals.find(item => item.slot.id === meal.slot.id);
+      if (target && option && !option.hardBlocked) { target.selectedId = place.poiId; target.locked = true; }
+    }
   }
+  generated.summary = summarizeFood(generated);
   const food: FoodPlan = plan.phase === 'food_selection' ? asDraftFood(generated) : generated;
+  for (const group of ambiguous) {
+    const branchCandidates = group.places.map(place => {
+      const choices = food.meals.flatMap(candidateMeal => candidateMeal.options
+        .filter(option => option.restaurant.id === place.poiId)
+        .map(option => ({ meal: candidateMeal, option })))
+        .sort((a, b) => Number(a.option.hardBlocked) - Number(b.option.hardBlocked)
+          || Number(a.option.reasons.length > 0) - Number(b.option.reasons.length > 0)
+          || Number(a.option.pending.length > 0) - Number(b.option.pending.length > 0)
+          || (a.option.extraMinutes ?? Number.MAX_SAFE_INTEGER) - (b.option.extraMinutes ?? Number.MAX_SAFE_INTEGER)
+          || b.option.score - a.option.score);
+      const best = choices[0];
+      const routeMeters = best && best.option.route.every(leg => leg.meters !== null)
+        ? best.option.route.reduce((total, leg) => total + (leg.meters || 0), 0) : null;
+      return {
+        restaurantId: place.poiId, name: place.name, address: place.address,
+        restaurant: best?.option.restaurant || restaurantFromPlace(place),
+        mealId: best?.meal.slot.id || null,
+        mealLabel: best ? `${best.meal.slot.date} ${best.meal.slot.label}` : null,
+        dayIndex: best?.meal.slot.dayIndex ?? null,
+        routeMeters,
+        extraMeters: best?.option.extraMeters ?? null,
+        extraMinutes: best?.option.extraMinutes ?? null,
+        extraFare: best?.option.extraFare ?? null,
+        reasons: best?.option.reasons || ['当前行程没有可用餐次'],
+        pending: best?.option.pending || [],
+        hardBlocked: best?.option.hardBlocked ?? true,
+        replacesRestaurantName: best ? best.meal.options.find(option => option.restaurant.id === best.meal.draftSelectedId)?.restaurant.name || null : null,
+        recommended: false,
+      };
+    }).sort((a, b) => Number(a.hardBlocked) - Number(b.hardBlocked)
+      || Number(a.reasons.length > 0) - Number(b.reasons.length > 0)
+      || Number(a.pending.length > 0) - Number(b.pending.length > 0)
+      || (a.extraMinutes ?? Number.MAX_SAFE_INTEGER) - (b.extraMinutes ?? Number.MAX_SAFE_INTEGER));
+    const recommended = branchCandidates.find(candidate => !candidate.hardBlocked && candidate.mealId);
+    if (recommended) recommended.recommended = true;
+    decisions.push({ input: group.inputName, status: 'needs_branch', candidates: branchCandidates, reasons: ['匹配到多个分店，请根据推荐餐次和道路距离选择具体分店。'] });
+  }
   for (const place of matches) {
     const assigned = food.meals.find(candidateMeal => (plan.phase === 'food_selection' ? candidateMeal.draftSelectedId : candidateMeal.selectedId) === place.poiId);
     const option = assigned?.options.find(candidate => candidate.restaurant.id === place.poiId);
@@ -114,6 +188,39 @@ export async function addRestaurantCandidates(plan: Plan, input: { mealId?: stri
   const paths = await routePaths(plan, points, map);
   const route = { ...plan.route, points, paths, state: paths.length && paths.every(path => path.state === 'live') ? 'live' as const : 'pending' as const, queriedAt: new Date().toISOString() };
   return { ...plan, food, route, budgetMeta: budgetMeta(plan.request, route), sources: { ...plan.sources, map: route.state, updatedAt: new Date().toISOString() } };
+}
+
+export async function resolveRestaurantBranch(plan: Plan, input: { manualInput: string; restaurantId: string; mealId: string }): Promise<Plan> {
+  if (plan.phase !== 'food_selection') throw Error('餐厅已经确认，不能再修改分店草稿');
+  const decision = plan.food.manualRestaurants.find(item => item.input === input.manualInput && item.status === 'needs_branch');
+  if (!decision) throw Error('待确认的指定餐厅已失效，请重新查询');
+  const candidate = decision.candidates?.find(item => item.restaurantId === input.restaurantId && item.mealId === input.mealId);
+  if (!candidate) throw Error('分店或推荐餐次不在当前方案中，请重新查询');
+  if (candidate.hardBlocked) throw Error('该分店存在明确饮食禁忌冲突，不能加入路线');
+  const currentRestaurants = plan.food.meals.flatMap(item => item.options.map(option => option.restaurant));
+  const restaurants = [...new Map([...currentRestaurants, { ...candidate.restaurant, preferred: true, preferredMealId: input.mealId }].map(item => [item.id, item])).values()];
+  const generated = await rebuildFoodPlan(plan.request, plan.days, plan.budget, process.env, fetch, { mapIntervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400, preferredRestaurants: restaurants, discoverySources: null });
+  const food: FoodPlan = asDraftFood(generated);
+  for (const oldMeal of plan.food.meals) {
+    const nextMeal = food.meals.find(item => item.slot.id === oldMeal.slot.id);
+    if (nextMeal && oldMeal.draftSelectedId && nextMeal.options.some(option => option.restaurant.id === oldMeal.draftSelectedId)) nextMeal.draftSelectedId = oldMeal.draftSelectedId;
+  }
+  food.meals.forEach(item => { if (item.slot.id !== input.mealId && item.draftSelectedId === input.restaurantId) item.draftSelectedId = null; });
+  const target = food.meals.find(item => item.slot.id === input.mealId);
+  const option = target?.options.find(item => item.restaurant.id === input.restaurantId);
+  if (!target || !option) throw Error('该分店的路线候选已失效，请重新查询');
+  if (option.hardBlocked) throw Error('该分店存在明确饮食禁忌冲突，不能加入路线');
+  target.draftSelectedId = input.restaurantId;
+  food.summary = draftSummary(food);
+  food.manualRestaurants = plan.food.manualRestaurants.map(item => item.input !== input.manualInput ? item : {
+    input: item.input, restaurantId: option.restaurant.id, matchedName: option.restaurant.name,
+    address: option.restaurant.address, mealId: target.slot.id,
+    mealLabel: `${target.slot.date} ${target.slot.label}`, dayIndex: target.slot.dayIndex,
+    extraMinutes: option.extraMinutes,
+    status: option.reasons.length || option.pending.length ? 'needs_risk_confirmation' as const : 'scheduled_draft' as const,
+    reasons: [...option.reasons, ...option.pending],
+  });
+  return { ...plan, food, sources: { ...plan.sources, updatedAt: new Date().toISOString() } };
 }
 
 export async function finalizeFoodPlan(plan: Plan, selections: { mealId: string; restaurantId: string | null; acceptWarnings: boolean }[], skippedManualInputs: string[] = []): Promise<Plan> {

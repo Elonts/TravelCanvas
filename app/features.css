@@ -167,6 +167,8 @@
 .finalize-food { display: flex; gap: 18px; align-items: center; justify-content: space-between; padding: 15px; color: #f8f4e9; background: var(--green); border-radius: 9px; }
 .finalize-food p { margin: 4px 0 0; color: #d8e7df; font-size: 12px; }
 .finalize-food button { flex: 0 0 auto; width: auto; color: var(--green); background: #fffdf8; }
+.food-blockers { margin-top: 10px; padding: 10px 12px; color: #783d30; background: #fff2eb; border-radius: 7px; }
+.food-blockers ul { margin: 6px 0 0; }
 .risk-confirm { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; padding: 10px; color: #804031; font-size: 12px; line-height: 1.5; background: #fff2eb; border-radius: 7px; }
 .risk-confirm input { flex: 0 0 auto; width: auto; margin-top: 2px; }
 .detour-choices { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }
@@ -252,7 +254,17 @@
 .manual-restaurant-row span { color: var(--green); font-weight: 700; }
 .manual-restaurant-row small { color: var(--muted); overflow-wrap: anywhere; }
 .manual-restaurant-row.needs-action { background: var(--orange-soft); }
+.manual-restaurant-row:focus, .meal:focus { outline: 3px solid rgba(203, 91, 57, .38); outline-offset: 3px; }
+.branch-candidates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+.branch-candidate { display: grid; gap: 8px; padding: 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 9px; }
+.branch-candidate.recommended { border-color: var(--green); box-shadow: inset 0 0 0 1px rgba(31, 98, 85, .16); }
+.branch-candidate > div:first-child { display: grid; gap: 4px; }
+.branch-candidate .lock-badge { margin-left: 7px; }
+.branch-metrics { display: flex !important; flex-wrap: wrap; gap: 5px !important; }
+.branch-metrics span { padding: 3px 6px; color: #52615b; font-size: 10px; background: #efeee8; border-radius: 4px; }
+.branch-candidate button { width: 100%; }
 .entertainment-anchor { display: grid; grid-template-columns: minmax(0, 2fr) minmax(150px, 1fr); gap: 13px; align-items: end; }
 .entertainment-anchor label { min-width: 0; }
+@media (max-width: 760px) { .branch-candidates { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .manual-restaurant-row { flex-direction: column; } }
 @media (max-width: 520px) { .entertainment-anchor { grid-template-columns: 1fr; } }
