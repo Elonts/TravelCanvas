@@ -8,11 +8,12 @@ const labels = { attraction: '景区', food: '美食', entertainment: '娱乐' }
 const icons = { attraction: '景', food: '味', entertainment: '乐' };
 const stamp = (value: string) => new Date(value).toLocaleString('zh-CN');
 
-export function CandidatePicker({ discovery, selectedIds, busy, guideBusy, error, onToggle, onGenerate, onAddCustom, onRetryGuides }: {
-  discovery: DiscoveryResult; selectedIds: string[]; busy: boolean; guideBusy: boolean; error: string;
+export function CandidatePicker({ discovery, selectedIds, busy, guideBusy, xhsConnected, xhsBusyCity, xhsError, error, onToggle, onGenerate, onAddCustom, onRetryGuides, onSearchLoggedInXhs }: {
+  discovery: DiscoveryResult; selectedIds: string[]; busy: boolean; guideBusy: boolean; xhsConnected: boolean; xhsBusyCity: string; xhsError: string; error: string;
   onToggle: (id: string) => void; onGenerate: () => void;
   onAddCustom: (city: string, kind: 'attraction', names: string[]) => Promise<void>;
   onRetryGuides: () => void;
+  onSearchLoggedInXhs: (city: string) => void;
 }) {
   const [custom, setCustom] = useState<Record<string, string>>({});
   const [customError, setCustomError] = useState<Record<string, string>>({});
@@ -21,11 +22,13 @@ export function CandidatePicker({ discovery, selectedIds, busy, guideBusy, error
   return <section className="candidate-panel panel">
     <div className="section-head"><div><span className="eyebrow">02 / 选择想去的地方</span><h2>先挑喜欢的，再安排路线</h2></div><small>候选保留到 {new Date(discovery.expiresAt).toLocaleTimeString('zh-CN')}</small></div>
     <div className={`guide-search-status ${discovery.guideSearch.state}`} role="status" aria-live="polite"><div><b>{discovery.guideSearch.state === 'searching' ? '正在补充公开攻略' : discovery.guideSearch.state === 'live' ? '公开攻略已补充' : discovery.guideSearch.state === 'partial' ? '公开攻略部分可用' : discovery.guideSearch.state === 'failed' ? '公开攻略未取得' : '公开攻略等待检索'}</b><p>{discovery.guideSearch.message}</p>{discovery.guideSearch.stats && <small>公开搜索 {discovery.guideSearch.stats.searched} 篇 · 保留 {discovery.guideSearch.stats.kept} 篇 · 目的地不相关 {discovery.guideSearch.stats.unrelated} 篇 · 重复 {discovery.guideSearch.stats.duplicate} 篇 · 正文不可读 {discovery.guideSearch.stats.bodyUnavailable} 篇</small>}{discovery.guideSearch.queriedAt && <small>查询 {stamp(discovery.guideSearch.queriedAt)} · 尝试 {discovery.guideSearch.attempts} 次</small>}</div>{discovery.guideSearch.retryable && discovery.guideSearch.state !== 'searching' && <button type="button" className="secondary" disabled={guideBusy} onClick={onRetryGuides}>{guideBusy ? '正在重试…' : '重新检索攻略'}</button>}</div>
-    <div className="notice">景区来源：AI {discovery.sources.ai === 'live' ? '建议已生成' : '使用降级候选'} · 高德 {discovery.sources.map === 'live' ? '地点已核验' : '部分待确认'}。攻略只覆盖 Tavily 公开收录内容；餐厅会在基础路线生成后再顺路查询。</div>
+    <div className="notice">景区来源：AI {discovery.sources.ai === 'live' ? '建议已生成' : '使用降级候选'} · 高德 {discovery.sources.map === 'live' ? '地点已核验' : '部分待确认'}。默认攻略覆盖 Tavily 公开索引；连接本地扩展后，可由你主动补充当前登录态搜索页的可见结果。</div>
+    <div className={`xhs-session-status ${xhsConnected ? 'connected' : ''}`}><div><b>{xhsConnected ? '本地小红书扩展已连接' : '本地小红书扩展未连接'}</b><p>{xhsConnected ? discovery.xhsSession.message : '在 Chrome 或 Edge 加载扩展后，打开扩展弹窗并点击“连接当前 TravelCanvas”。扩展不会读取或传输 Cookie、Token、密码。'}</p>{discovery.xhsSession.queriedAt && <small>登录态搜索查询 {stamp(discovery.xhsSession.queriedAt)} · 读取 {discovery.xhsSession.count} 条结果卡 · 核验保留 {discovery.xhsSession.kept} 个地点</small>}</div></div>
+    {xhsError && <p className="error" role="alert">{xhsError}</p>}
     {!!discovery.guideSources.length && <details className="candidate-warnings guide-sources"><summary>公开攻略综合推荐来源（各目的地最多 8 篇）</summary>{discovery.guideSources.map(source => <p key={source.id}><b>{source.city} · 相关性第 {source.rank} 篇</b> · <a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a> · {source.contentState === 'full' ? '公开正文' : '搜索摘要'} · 查询 {stamp(source.queriedAt)}</p>)}</details>}
     {!!discovery.warnings.length && <details className="candidate-warnings"><summary>查看数据提示（{discovery.warnings.length}）</summary>{discovery.warnings.map(warning => <p key={warning}>{warning}</p>)}</details>}
     {discovery.request.destinations.map(city => <section className="candidate-city" key={city}>
-      <h3>{city}</h3>
+      <div className="candidate-city-head"><h3>{city}</h3><button type="button" className="secondary" disabled={!xhsConnected || Boolean(xhsBusyCity)} onClick={() => onSearchLoggedInXhs(city)}>{xhsBusyCity === city ? '正在读取两组搜索结果…' : '用已登录小红书补充'}</button></div>
       {(['attraction'] as const).map(kind => {
         const items = discovery.candidates.filter(candidate => candidate.city === city && candidate.kind === kind).sort((a, b) => Number(selected.has(b.id)) - Number(selected.has(a.id)) || b.guideScore - a.guideScore);
         return <div className="candidate-category" key={kind}><div className="candidate-category-title"><b>{labels[kind]}</b><span>{items.length} 个候选</span></div>
@@ -68,7 +71,7 @@ function CandidateCard({ candidate, checked, onToggle }: { candidate: DiscoveryC
       <div className="tags"><span>建议 {candidate.durationMinutes} 分钟</span><span>{candidate.estimatedCost === null ? '费用待确认' : `参考 ¥${candidate.estimatedCost}`}</span><span>{candidate.category}</span>{candidate.scenicRole === 'child' && <span>园内子景点 · 手动保留</span>}</div>
       {candidate.scenicRole === 'child' && <p className="constraint-note">这是主景区内部的子景点，通常随主景区一并游览；不要再同时选择对应主景区。</p>}
       {candidate.constraintWarning && <p className="constraint-note">限制核对：{candidate.constraintWarning}</p>}
-      {!!candidate.evidence.length && <details className="candidate-evidence"><summary>小红书公开笔记证据（{candidate.evidence.length}）</summary>{candidate.evidence.map(evidence => <div key={`${evidence.sourceId}-${evidence.quote}`}><p>“{evidence.quote}”</p><small>{evidence.url ? <a href={evidence.url} target="_blank" rel="noreferrer">{evidence.title} ↗</a> : evidence.title} · 发布 {evidence.publishedAt || '未知'} · 查询 {stamp(evidence.queriedAt)}</small></div>)}</details>}
+      {!!candidate.evidence.length && <details className="candidate-evidence"><summary>小红书证据（{candidate.evidence.length}）</summary>{candidate.evidence.map(evidence => <div key={`${evidence.sourceId}-${evidence.quote}`}><p>“{evidence.quote}”</p><small>{evidence.sourceKind === 'xhs_session' ? `登录态搜索结果 · 顺序第 ${evidence.searchRank} · 可见点赞 ${evidence.visibleLikes ?? '未知'}` : 'Tavily 公开索引'} · {evidence.url ? <a href={evidence.url} target="_blank" rel="noreferrer">{evidence.title} ↗</a> : evidence.title} · 发布 {evidence.publishedAt || '未知'} · 查询 {stamp(evidence.queriedAt)}</small></div>)}</details>}
       {!!candidate.guideEvidence.length && <details className="candidate-evidence"><summary>旅游攻略原文证据（{candidate.guideEvidence.length}）</summary>{candidate.guideEvidence.map(evidence => <div key={`${evidence.sourceId}-${evidence.quote}`}><p>“{evidence.quote}”</p>{evidence.advice && <p><b>游览建议：</b>{evidence.advice}</p>}<small>{evidence.city} · 相关性第 {evidence.rank} 篇 · {evidence.contentState === 'full' ? '公开正文' : '搜索摘要'} · <a href={evidence.url} target="_blank" rel="noreferrer">{evidence.title} ↗</a></small></div>)}</details>}
       {candidate.imageAttribution && <small className="candidate-source">图片：{candidate.imageAttribution.sourceUrl ? <a href={candidate.imageAttribution.sourceUrl} target="_blank" rel="noreferrer">{candidate.imageAttribution.label} ↗</a> : candidate.imageAttribution.label} · 查询 {stamp(candidate.imageAttribution.queriedAt)}</small>}
       <small className="candidate-source">地点：{candidate.source} · 查询 {stamp(candidate.queriedAt)}</small>

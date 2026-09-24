@@ -254,6 +254,12 @@
 .manual-restaurant-row span { color: var(--green); font-weight: 700; }
 .manual-restaurant-row small { color: var(--muted); overflow-wrap: anywhere; }
 .manual-restaurant-row.needs-action { background: var(--orange-soft); }
+.xhs-session-status { display: flex; gap: 14px; align-items: center; justify-content: space-between; margin: 12px 0; padding: 13px 15px; background: #f3efe5; border: 1px solid var(--line); border-radius: 9px; }
+.xhs-session-status.connected { background: var(--green-soft); border-color: #aac8ba; }
+.xhs-session-status p { margin: 4px 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.candidate-city-head { display: flex; gap: 14px; align-items: center; justify-content: space-between; }
+.candidate-city-head h3 { margin: 0; }
+.candidate-city-head button { width: auto; }
 .manual-restaurant-row:focus, .meal:focus { outline: 3px solid rgba(203, 91, 57, .38); outline-offset: 3px; }
 .branch-candidates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
 .branch-candidate { display: grid; gap: 8px; padding: 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 9px; }
@@ -267,4 +273,5 @@
 .entertainment-anchor label { min-width: 0; }
 @media (max-width: 760px) { .branch-candidates { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .manual-restaurant-row { flex-direction: column; } }
+@media (max-width: 520px) { .candidate-city-head { align-items: stretch; flex-direction: column; } .candidate-city-head button { width: 100%; } }
 @media (max-width: 520px) { .entertainment-anchor { grid-template-columns: 1fr; } }

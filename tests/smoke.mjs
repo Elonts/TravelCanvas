@@ -38,6 +38,15 @@ for (const mode of ['fixtures', 'offline']) {
     assert.equal(initial.found.value.sources.guides, 'live');
     assert.ok(['live', 'partial'].includes(initial.found.value.guideSearch.state));
     assert.ok(initial.found.value.candidates.some(candidate => candidate.kind === 'attraction' && candidate.guideEvidence.length && candidate.guideScore > 0));
+    const xhsPlace = initial.found.value.candidates.find(candidate => candidate.kind === 'attraction');
+    const sessionImport = await post('/api/discover/xhs-session', {
+      discoveryId: initial.found.value.discoveryId, city: xhsPlace.city, category: 'attractions',
+      query: `${xhsPlace.city} 旅游攻略 必去景点`, queriedAt: new Date().toISOString(),
+      results: [{ title: `${xhsPlace.name}游览建议`, snippet: `${xhsPlace.name}适合安排半天`, url: 'https://www.xiaohongshu.com/explore/sessionfixture1', author: '公开作者', rank: 1, visibleLikes: 1200, publishedAt: '2026-09-20' }],
+    });
+    assert.equal(sessionImport.status, 200, JSON.stringify(sessionImport.value));
+    assert.equal(sessionImport.value.xhsSession.connection, 'connected');
+    assert.ok(sessionImport.value.candidates.find(candidate => candidate.poiId === xhsPlace.poiId).evidence.some(evidence => evidence.sourceKind === 'xhs_session'));
     const guideRankedAttractions = initial.found.value.candidates.filter(candidate => candidate.kind === 'attraction');
     assert.equal(guideRankedAttractions[0].name, '西湖风景名胜区');
     assert.ok(guideRankedAttractions[0].guideScore > guideRankedAttractions[1].guideScore);

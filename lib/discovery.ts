@@ -2,12 +2,13 @@ import 'server-only';
 import { z } from 'zod';
 import { candidateStops } from './fixtures';
 import { createMapProvider, extractTips, searchNotes } from './food-providers.mjs';
-import type { DiscoveryCandidate, DiscoveryEvidence } from './discovery-types';
+import type { DiscoveryCandidate, DiscoveryEvidence, DiscoveryResult } from './discovery-types';
 import type { TripRequest, DataState } from './plan';
 import { amapImageAttribution, fillMissingWebImages } from './web-images.mjs';
 import { attractionPreferenceFit, foodPreferenceTerms } from './preference-fit.mjs';
 import { enrichGuideBodies, extractGuideFoodInsights, extractGuideInsights, isGuideRelevant, searchTravelGuides } from './travel-guides.mjs';
 import { collapseScenicChildren } from './scenic-groups.mjs';
+import { sessionHeatScore } from './xhs-session.mjs';
 
 const suggestionSchema = z.object({
   attractions: z.array(z.object({ name: z.string().trim().min(2).max(100), reason: z.string().trim().min(2).max(240) })).max(8),
@@ -125,7 +126,117 @@ export async function discoverCandidates(request: TripRequest) {
     request, candidates: picturedCandidates, warnings,
     guideSources: [],
     guideSearch: { state: 'idle' as const, code: null, message: '基础景区已就绪，正在等待补充公开攻略。', attempts: 0, count: 0, retryable: true, queriedAt: null },
+    xhsSession: { state: 'idle' as const, connection: 'disconnected' as const, count: 0, kept: 0, code: null, message: '可选：连接本地扩展后，用已登录的小红书搜索页补充可见结果。', queriedAt: null, cities: {} },
     sources: { search: 'pending' as const, guides: 'pending' as const, ai: stateOf(suggestions.map(item => item.state)), map: stateOf(mapStates), updatedAt: new Date().toISOString() },
+  };
+}
+
+type XhsSessionBatch = {
+  city: string; category: 'attractions' | 'food'; query: string; queriedAt: string;
+  results: { title: string; snippet: string; url: string; author: string | null; rank: number; visibleLikes: number | null; publishedAt: string | null }[];
+};
+
+function xhsSources(batch: XhsSessionBatch) {
+  return batch.results.map(item => ({
+    id: `xhs-session:${batch.city}:${batch.category}:${item.rank}:${encodeURIComponent(item.url).slice(-80)}`,
+    city: batch.city, rank: item.rank, title: item.title, url: item.url,
+    content: `${item.title}${item.snippet ? `。${item.snippet}` : ''}`,
+    contentState: 'summary' as const, relevance: null, publishedAt: item.publishedAt,
+    queriedAt: batch.queriedAt, query: batch.query, author: item.author, visibleLikes: item.visibleLikes,
+  }));
+}
+
+function xhsEvidenceFor(name: string, insights: { sourceId: string; placeName: string; quote: string; dishes?: string[] }[], sources: ReturnType<typeof xhsSources>): DiscoveryEvidence[] {
+  return insights.filter(insight => normalize(insight.placeName) === normalize(name)).flatMap(insight => {
+    const source = sources.find(item => item.id === insight.sourceId);
+    return source ? [{ sourceId: source.id, title: source.title, url: source.url, quote: insight.quote, dishes: insight.dishes,
+      publishedAt: source.publishedAt, queriedAt: source.queriedAt, sourceKind: 'xhs_session' as const,
+      searchRank: source.rank, visibleLikes: source.visibleLikes, query: source.query, author: source.author }] : [];
+  });
+}
+
+function literalXhsInsights(candidates: DiscoveryCandidate[], sources: ReturnType<typeof xhsSources>) {
+  const insights: { sourceId: string; placeName: string; quote: string; dishes: string[] }[] = [];
+  for (const source of sources) for (const candidate of candidates.filter(item => item.city === source.city)) {
+    const index = source.content.indexOf(candidate.name);
+    if (index < 0) continue;
+    insights.push({ sourceId: source.id, placeName: candidate.name, quote: source.content.slice(Math.max(0, index - 45), index + candidate.name.length + 120), dishes: [] });
+  }
+  return insights;
+}
+
+function mergeCandidateEvidence(candidate: DiscoveryCandidate, evidence: DiscoveryEvidence[]) {
+  const merged = [...candidate.evidence, ...evidence.filter(item => !candidate.evidence.some(existing => existing.sourceId === item.sourceId && existing.quote === item.quote))].slice(0, 20);
+  const heat = sessionHeatScore(merged);
+  return evidence.length ? {
+    ...candidate, evidence: merged, evidenceScore: candidate.evidenceScore + heat, sessionHeatScore: heat,
+    source: `${candidate.source} + 小红书登录态搜索`,
+    recommendationReason: `${new Set(evidence.map(item => item.sourceId)).size} 条登录态搜索结果卡提及；热度仅为当前搜索顺序与可见互动量代理。 ${candidate.recommendationReason}`,
+  } : candidate;
+}
+
+export async function mergeDiscoveryWithXhsSession(discovery: DiscoveryResult, batch: XhsSessionBatch) {
+  if (!discovery.request.destinations.includes(batch.city)) throw Error('登录态结果城市不属于本次行程');
+  if (!process.env.AMAP_API_KEY) throw Error('高德服务未配置，无法核验登录态搜索中的地点');
+  const sources = xhsSources(batch);
+  const map = createMapProvider(process.env, fetch, { intervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400 });
+  let candidates = [...discovery.candidates];
+  let guideFoodCandidates = [...(discovery.guideFoodCandidates || [])];
+  if (batch.category === 'attractions') {
+    const existing = candidates.filter(item => item.city === batch.city && item.kind === 'attraction');
+    const literal = literalXhsInsights(existing, sources);
+    const ai = await extractGuideInsights(sources);
+    const keys = new Set(literal.map(item => `${item.sourceId}:${normalize(item.placeName)}`));
+    const insights = [...literal, ...ai.filter(item => !keys.has(`${item.sourceId}:${normalize(item.placeName)}`))];
+    const unknownNames = [...new Set(insights.map(item => item.placeName))].filter(name => !existing.some(item => normalize(item.name) === normalize(name))).slice(0, 12);
+    if (unknownNames.length) {
+      const places = await map.discover(batch.city, 'attraction', unknownNames, Math.min(24, unknownNames.length * 2), discovery.request.transport);
+      const exact = places.filter(place => unknownNames.some(name => normalize(name) === normalize(place.name)));
+      const reasons = new Map(unknownNames.map(name => [normalize(name), '登录态搜索结果卡逐字提及，并经高德核验为当前城市景区。']));
+      candidates.push(...exact.map(place => makeCandidate(place, 'attraction', discovery.request, reasons, [], [])).filter(item => !candidates.some(existingItem => existingItem.poiId === item.poiId)));
+    }
+    candidates = collapseScenicChildren(candidates).map(candidate => candidate.city === batch.city && candidate.kind === 'attraction'
+      ? mergeCandidateEvidence(candidate, xhsEvidenceFor(candidate.name, insights, sources)) : candidate);
+    candidates = discovery.request.destinations.flatMap(city => candidates.filter(candidate => candidate.city === city).sort((a, b) =>
+      ((b.preferenceFitScore || 0) * 50 + (b.sessionHeatScore || 0) + b.guideScore) - ((a.preferenceFitScore || 0) * 50 + (a.sessionHeatScore || 0) + a.guideScore)));
+  } else {
+    const knownFood = guideFoodCandidates.filter(item => item.city === batch.city && item.kind === 'food');
+    const literal = literalXhsInsights(knownFood, sources);
+    const ai = await extractGuideFoodInsights(sources);
+    const keys = new Set(literal.map(item => `${item.sourceId}:${normalize(item.placeName)}`));
+    const insights = [...literal, ...ai.filter(item => !keys.has(`${item.sourceId}:${normalize(item.placeName)}`))];
+    const names = [...new Set(insights.map(item => item.placeName))].slice(0, 20);
+    if (names.length) {
+      const places = await map.discover(batch.city, 'food', names, Math.min(40, Math.max(12, names.length * 3)), discovery.request.transport);
+      const exact = places.filter(place => names.some(name => normalize(name) === normalize(place.name)));
+      const reasons = new Map(names.map(name => [normalize(name), '登录态搜索结果卡逐字提及，并经高德核验为当前城市具体餐饮 POI。']));
+      for (const place of exact) {
+        const evidence = xhsEvidenceFor(place.name, insights, sources);
+        const base = makeCandidate(place, 'food', discovery.request, reasons, [], []);
+        const merged = mergeCandidateEvidence(base, evidence);
+        const index = guideFoodCandidates.findIndex(item => item.poiId === merged.poiId && item.city === merged.city);
+        if (index >= 0) guideFoodCandidates[index] = mergeCandidateEvidence(guideFoodCandidates[index], evidence);
+        else guideFoodCandidates.push(merged);
+      }
+    }
+    guideFoodCandidates.sort((a, b) => (b.sessionHeatScore || 0) - (a.sessionHeatScore || 0) || b.evidenceScore - a.evidenceScore);
+  }
+  const cityStatus = discovery.xhsSession?.cities || {};
+  const previous = cityStatus[batch.city] || { attractions: 0, food: 0, queriedAt: batch.queriedAt };
+  const kept = batch.category === 'attractions'
+    ? candidates.filter(item => item.city === batch.city && (item.sessionHeatScore || 0) > 0).length
+    : guideFoodCandidates.filter(item => item.city === batch.city && (item.sessionHeatScore || 0) > 0).length;
+  return {
+    ...discovery, candidates, guideFoodCandidates: guideFoodCandidates.slice(0, 20),
+    xhsSession: {
+      state: kept ? 'live' as const : 'partial' as const, connection: 'connected' as const,
+      count: (discovery.xhsSession?.count || 0) + batch.results.length,
+      kept: (discovery.xhsSession?.kept || 0) + kept, code: null,
+      message: kept ? `已导入 ${batch.results.length} 条${batch.category === 'attractions' ? '景点' : '美食'}搜索结果卡，并保留 ${kept} 个经高德核验的地点。` : `已读取 ${batch.results.length} 条结果卡，但没有地点通过逐字证据与高德同城核验。`,
+      queriedAt: batch.queriedAt,
+      cities: { ...cityStatus, [batch.city]: { ...previous, [batch.category]: batch.results.length, queriedAt: batch.queriedAt } },
+    },
+    sources: { ...discovery.sources, updatedAt: new Date().toISOString() },
   };
 }
 

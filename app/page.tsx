@@ -23,6 +23,9 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [changing, setChanging] = useState(false);
   const [guidesLoading, setGuidesLoading] = useState(false);
+  const [xhsConnected, setXhsConnected] = useState(false);
+  const [xhsBusyCity, setXhsBusyCity] = useState('');
+  const [xhsError, setXhsError] = useState('');
   const [error, setError] = useState('');
   const [changeError, setChangeError] = useState('');
   const [destinations, setDestinations] = useState<string[]>([]);
@@ -40,6 +43,26 @@ export default function Home() {
       return current.find(leg => leg.fromCity === fromCity && leg.toCity === toCity) || { fromCity, toCity, mode: 'high_speed_rail', departureAt: '', arrivalAt: '', tripNo: '' };
     }));
   }, [origin, destinations]);
+  useEffect(() => {
+    const labels: Record<string, string> = { not_connected: '扩展尚未连接当前 TravelCanvas 标签页。', busy: '扩展正在处理另一个目的地，请稍后再试。', captcha: '小红书出现验证码，请在小红书页面人工完成后重试。', login_required: '小红书登录已失效，请先在打开的页面重新登录。', structure_changed: '小红书页面结构发生变化，扩展暂时无法识别结果卡。', timeout: '登录态搜索等待超时，请检查小红书页面后重试。', extension_error: '扩展执行失败，请刷新页面或重新连接。' };
+    const receive = async (event: MessageEvent) => {
+      if (event.source !== window || event.origin !== window.location.origin || event.data?.source !== 'travelcanvas-extension') return;
+      if (event.data.type === 'TRAVELCANVAS_XHS_STATUS_RESULT') { setXhsConnected(Boolean(event.data.connected)); return; }
+      if (event.data.type !== 'TRAVELCANVAS_XHS_RESULT') return;
+      if (!event.data.ok) { setXhsError(labels[event.data.code] || '登录态搜索失败。'); setXhsBusyCity(''); return; }
+      try {
+        for (const batch of event.data.batches || []) {
+          const response = await fetch('/api/discover/xhs-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discoveryId: event.data.discoveryId, city: event.data.city, ...batch }) });
+          const json = await response.json(); if (!response.ok) throw Error(json.error);
+          setDiscovery(current => current?.discoveryId === event.data.discoveryId ? json : current);
+        }
+      } catch (cause) { setXhsError(userFacingRequestError(cause, '登录态结果导入失败')); }
+      finally { setXhsBusyCity(''); }
+    };
+    window.addEventListener('message', receive);
+    window.postMessage({ source: 'travelcanvas-page', type: 'TRAVELCANVAS_XHS_STATUS' }, window.location.origin);
+    return () => window.removeEventListener('message', receive);
+  }, []);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setLoading(true); setError(''); setChangeError('');
     try {
@@ -69,6 +92,14 @@ export default function Home() {
     } catch (cause) {
       setDiscovery(current => current?.discoveryId === discoveryId ? { ...current, guideSearch: { ...current.guideSearch, state: 'failed', code: 'provider_error', message: userFacingRequestError(cause, '公开攻略检索失败'), retryable: true, queriedAt: new Date().toISOString() } } : current);
     } finally { setGuidesLoading(false); }
+  };
+  const searchLoggedInXhs = (city: string) => {
+    if (!discovery || xhsBusyCity) return;
+    setXhsError(''); setXhsBusyCity(city);
+    window.postMessage({ source: 'travelcanvas-page', type: 'TRAVELCANVAS_XHS_START', discoveryId: discovery.discoveryId, city, queries: [
+      { category: 'attractions', query: `${city} ${discovery.request.preferences || ''} 旅游攻略 必去景点`.replace(/\s+/g, ' ').trim() },
+      { category: 'food', query: `${city} ${discovery.request.foodPreferences || ''} 美食推荐`.replace(/\s+/g, ' ').trim() },
+    ] }, window.location.origin);
   };
   const generatePlan = async () => {
     if (!discovery || loading) return;
@@ -194,7 +225,7 @@ export default function Home() {
       <aside className="experience-map"><JourneyCanvas destinations={destinations} discovery={discovery} selectedIds={selectedIds} plan={plan} loading={loading} /></aside>
       {(discovery || plan) && <div className="stage-content">
         {discovery && (candidateExpanded
-          ? <CandidatePicker discovery={discovery} selectedIds={selectedIds} busy={loading} guideBusy={guidesLoading} error={plan ? '' : error} onToggle={toggleCandidate} onGenerate={generatePlan} onAddCustom={addCustomCandidates} onRetryGuides={() => refreshGuides(discovery.discoveryId)} />
+          ? <CandidatePicker discovery={discovery} selectedIds={selectedIds} busy={loading} guideBusy={guidesLoading} xhsConnected={xhsConnected} xhsBusyCity={xhsBusyCity} xhsError={xhsError} error={plan ? '' : error} onToggle={toggleCandidate} onGenerate={generatePlan} onAddCustom={addCustomCandidates} onRetryGuides={() => refreshGuides(discovery.discoveryId)} onSearchLoggedInXhs={searchLoggedInXhs} />
           : <section className="candidate-summary panel"><div><span className="eyebrow">02 / 选择想去的地方</span><h2>已收起景区候选</h2><p>已选 {discovery.candidates.filter(candidate => selectedIds.includes(candidate.id) && candidate.kind === 'attraction').length} 个景区。餐厅已按生成后的基础路线另行查询；展开修改景区后需重新生成路线。</p></div><button type="button" className="secondary" onClick={() => setCandidateExpanded(true)}>展开并修改选择</button></section>)}
         {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} onSearchRestaurants={searchRestaurants} onSelectRestaurantBranch={selectRestaurantBranch} onFinalizeFood={finalizeFood} onSearchEntertainment={searchEntertainment} onReplanDay={replanDay} changeError={changeError} />}
       </div>}
