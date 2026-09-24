@@ -79,12 +79,18 @@ export function MealCard({ meal, food, busy, draftMode = false, warningAccepted 
   </section>;
 }
 
-export function FoodDraftControls({ busy, canFinalize, onSearch, onFinalize }: { busy: boolean; canFinalize: boolean; onSearch: RestaurantSearchAction; onFinalize: () => Promise<void> }) {
+const manualStatus: Record<string, string> = { needs_branch: '需要确认具体分店', scheduled_draft: '已加入餐厅草稿', needs_risk_confirmation: '已安排，需确认风险', unassigned: '暂未安排', explicitly_skipped: '已明确跳过', finalized: '已进入最终路线' };
+
+export function FoodDraftControls({ food, busy, canFinalize, skippedManualInputs, onSkippedChange, onSearch, onFinalize }: { food: FoodPlan; busy: boolean; canFinalize: boolean; skippedManualInputs: Set<string>; onSkippedChange: (input: string, skipped: boolean) => void; onSearch: RestaurantSearchAction; onFinalize: () => Promise<void> }) {
   const [value, setValue] = useState('');
   const names = parsePlaceNames(value).slice(0, 8);
   return <section className="food-draft-controls">
     <div className="custom-restaurant-search"><label>还想吃其他餐厅？可一次输入多家<textarea rows={3} value={value} onChange={event => setValue(event.target.value)} placeholder="例如：楼外楼孤山店、知味观湖滨店（支持顿号、逗号或换行）" /></label><div><small>系统会核验具体分店，并建议最顺路的日期和餐次；超过绕路上限会醒目标记。</small><button type="button" className="secondary" disabled={busy || !names.length} onClick={async () => { await onSearch(names); setValue(''); }}>核验并加入草稿{names.length ? `（${names.length}）` : ''}</button></div></div>
-    <div className="finalize-food"><div><b>餐厅确认前，地图仍保持酒店、站点和景点基础路线</b><p>确认后才会重新计算交通、时间和预算。可以跳过不想安排的餐次。</p></div><button type="button" disabled={busy || !canFinalize} onClick={onFinalize}>{busy ? '正在生成最终路线…' : '确认餐厅并生成最终路线 →'}</button></div>
+    {!!food.manualRestaurants?.length && <div className="manual-restaurant-status" aria-label="指定餐厅处理结果"><h3>指定餐厅处理结果</h3><p>每家餐厅都必须进入某个餐次，或由你明确跳过；系统不会再静默忽略。</p>{food.manualRestaurants.map(decision => {
+      const unresolved = ['needs_branch', 'unassigned'].includes(decision.status);
+      return <div className={`manual-restaurant-row ${unresolved ? 'needs-action' : ''}`} key={decision.input}><div><b>{decision.matchedName || decision.input}</b><span>{manualStatus[decision.status] || decision.status}</span>{decision.mealLabel && <small>建议：{decision.mealLabel}{decision.extraMinutes !== null && decision.extraMinutes !== undefined ? ` · 新增约 ${decision.extraMinutes} 分钟` : ''}</small>}{decision.address && <small>{decision.address}</small>}{decision.reasons.map(reason => <small key={reason}>{reason}</small>)}{!!decision.candidates?.length && <small>可选分店：{decision.candidates.map(candidate => `${candidate.name}（${candidate.address}）`).join('、')}</small>}</div>{unresolved && <label className="risk-confirm"><input type="checkbox" checked={skippedManualInputs.has(decision.input)} onChange={event => onSkippedChange(decision.input, event.target.checked)} />本次明确不安排</label>}</div>;
+    })}</div>}
+    <div className="finalize-food"><div><b>餐厅确认前，地图仍保持酒店、站点和景点基础路线</b><p>确认后才会重新计算交通、时间和预算。指定餐厅必须已安排或明确跳过。</p></div><button type="button" disabled={busy || !canFinalize} onClick={onFinalize}>{busy ? '正在生成最终路线…' : '确认餐厅并生成最终路线 →'}</button></div>
   </section>;
 }
 

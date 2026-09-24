@@ -106,12 +106,12 @@ export default function Home() {
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
     } catch (e) { setChangeError(userFacingRequestError(e, '餐厅查询失败')); } finally { setChanging(false); }
   };
-  const finalizeFood = async (acceptedWarnings: Set<string>) => {
+  const finalizeFood = async (acceptedWarnings: Set<string>, skippedManualInputs: Set<string>) => {
     if (!plan || changing || loading) return;
     setChanging(true); setChangeError('');
     try {
       const selections = plan.food.meals.map(meal => ({ mealId: meal.slot.id, restaurantId: meal.draftSelectedId || null, acceptWarnings: acceptedWarnings.has(meal.slot.id) }));
-      const response = await fetch('/api/plan/finalize-food', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, selections }) });
+      const response = await fetch('/api/plan/finalize-food', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, selections, skippedManualInputs: [...skippedManualInputs] }) });
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
     } catch (e) { setChangeError(userFacingRequestError(e, '最终路线生成失败')); } finally { setChanging(false); }
   };
@@ -194,7 +194,7 @@ export default function Home() {
   </main>;
 }
 
-function PlanView({ plan, busy, onAction, onSearchRestaurants, onFinalizeFood, onSearchEntertainment, onReplanDay, changeError }: { plan: Plan; busy: boolean; onAction: MealAction; onSearchRestaurants: RestaurantSearchAction; onFinalizeFood: (acceptedWarnings: Set<string>) => Promise<void>; onSearchEntertainment: (dayIndex: number, preference: string, query: string, selectedIds: string[]) => Promise<void>; onReplanDay: (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentSelections: EntertainmentSelection[]) => Promise<void>; changeError: string }) {
+function PlanView({ plan, busy, onAction, onSearchRestaurants, onFinalizeFood, onSearchEntertainment, onReplanDay, changeError }: { plan: Plan; busy: boolean; onAction: MealAction; onSearchRestaurants: RestaurantSearchAction; onFinalizeFood: (acceptedWarnings: Set<string>, skippedManualInputs: Set<string>) => Promise<void>; onSearchEntertainment: (dayIndex: number, preference: string, query: string, selectedIds: string[]) => Promise<void>; onReplanDay: (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentSelections: EntertainmentSelection[]) => Promise<void>; changeError: string }) {
   const [activeDay, setActiveDay] = useState(0);
   const [replacementNames, setReplacementNames] = useState<Record<string, string>>({});
   const [entertainmentSelections, setEntertainmentSelections] = useState<Record<number, EntertainmentSelection[]>>({});
@@ -203,9 +203,11 @@ function PlanView({ plan, busy, onAction, onSearchRestaurants, onFinalizeFood, o
   const [entertainmentQueries, setEntertainmentQueries] = useState<Record<number, string>>({});
   const [venueChoices, setVenueChoices] = useState<Record<number, string>>({});
   const [acceptedFoodWarnings, setAcceptedFoodWarnings] = useState<Set<string>>(new Set());
+  const [skippedManualRestaurants, setSkippedManualRestaurants] = useState<Set<string>>(new Set());
   useEffect(() => {
     setReplacementNames({});
     setAcceptedFoodWarnings(new Set());
+    setSkippedManualRestaurants(new Set(plan.food.manualRestaurants?.filter(item => item.status === 'explicitly_skipped').map(item => item.input) || []));
   }, [plan.planId, plan.revision]);
   const total = Object.values(plan.budget).reduce((a, b) => a + b, 0);
   const labels: Record<string, string> = { transport: '交通建议上限', stay: '住宿建议上限', food: '餐饮建议上限', activities: '景点与娱乐建议上限', remaining: '剩余可用预算（未安排）' };
@@ -224,7 +226,8 @@ function PlanView({ plan, busy, onAction, onSearchRestaurants, onFinalizeFood, o
   const dayDirty = replacements.length > 0 || JSON.stringify(entertainmentSelection) !== JSON.stringify(entertainment?.selections || []);
   const selectedEntertainment = entertainmentSelection.map(selection => ({ selection, option: entertainment?.options.find(option => option.id === selection.id) })).filter(item => item.option);
   const draftMeals = plan.food.meals.filter(meal => meal.draftSelectedId);
-  const canFinalizeFood = plan.phase !== 'food_selection' || draftMeals.every(meal => {
+  const unresolvedManualRestaurants = (plan.food.manualRestaurants || []).filter(item => ['needs_branch', 'unassigned'].includes(item.status) && !skippedManualRestaurants.has(item.input));
+  const canFinalizeFood = (plan.phase !== 'food_selection' || unresolvedManualRestaurants.length === 0) && draftMeals.every(meal => {
     const selected = meal.options.find(option => option.restaurant.id === meal.draftSelectedId);
     return !selected?.reasons.length || acceptedFoodWarnings.has(meal.slot.id);
   });
@@ -266,7 +269,7 @@ function PlanView({ plan, busy, onAction, onSearchRestaurants, onFinalizeFood, o
         {!!selectedEntertainment.length && <div className="entertainment-draft"><b>当天娱乐草稿</b>{selectedEntertainment.map(({ option, selection }) => option && <div key={option.id}><span>{option.preference} · {option.name} · {{ morning: '上午', afternoon: '下午', evening: '晚上' }[selection.period]} · {routeDistance(option.routeMeters)} · 约 {option.routeMinutes ?? '待确认'} 分钟</span><label>时间段<select aria-label={`${option.name}时间段`} value={selection.period} onChange={event => setEntertainmentSelections(current => ({ ...current, [activeDay]: entertainmentSelection.map(item => item.id === option.id ? { ...item, period: event.target.value as EntertainmentPeriod } : item) }))}><option value="morning">上午</option><option value="afternoon">下午</option><option value="evening">晚上</option></select></label><button type="button" className="text-button" onClick={() => setEntertainmentSelections(current => ({ ...current, [activeDay]: entertainmentSelection.filter(item => item.id !== option.id) }))}>删除</button></div>)}</div>}
         {entertainment?.warning && <p>{entertainment.warning}</p>}<button type="button" disabled={busy || !dayDirty} onClick={() => onReplanDay(activeDay, replacements, entertainmentSelection)}>{busy ? '正在核验地点并重新规划…' : '保存修改并重新规划当天路线'}</button><small>景点替换和娱乐更改会在点击此按钮后一次生效；检索本身不会立即改变路线。</small></div>}
     </article>)}
-      {plan.phase === 'food_selection' && <FoodDraftControls busy={busy} canFinalize={canFinalizeFood} onSearch={onSearchRestaurants} onFinalize={() => onFinalizeFood(acceptedFoodWarnings)} />}
+      {plan.phase === 'food_selection' && <FoodDraftControls food={plan.food} busy={busy} canFinalize={canFinalizeFood} skippedManualInputs={skippedManualRestaurants} onSkippedChange={(input, skipped) => setSkippedManualRestaurants(current => { const next = new Set(current); if (skipped) next.add(input); else next.delete(input); return next; })} onSearch={onSearchRestaurants} onFinalize={() => onFinalizeFood(acceptedFoodWarnings, skippedManualRestaurants)} />}
       {!!generalTips.length && <div className="card"><span className="eyebrow">攻略参考 · 尚未匹配具体行程地点</span>{generalTips.map(tip => <SourceTip key={tip.id} tip={tip} food={plan.food} />)}</div>}
       {!!plan.guides?.length && <details className="card"><summary>景点排序参考的公开攻略（{plan.guides.length}）</summary><p>以下是 Tavily 公开搜索相关性顺序，不是小红书站内个性化榜单。</p>{plan.guides.map(source => <p key={source.id}><b>{source.city} · 第 {source.rank} 篇</b> · <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> · {source.contentState === 'full' ? '公开正文' : '搜索摘要'} · 查询 {new Date(source.queriedAt).toLocaleString('zh-CN')}</p>)}</details>}
       {!!plan.food.sources.length && <details className="card"><summary>本次攻略来源（{plan.food.sources.length}）</summary>{plan.food.sources.map(source => <p key={source.id}>{source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> : source.title} · {source.kind === 'search' ? '搜索摘要' : '用户提供'} · 发布 {source.publishedAt || '未知'} · 查询 {new Date(source.queriedAt).toLocaleString('zh-CN')}</p>)}</details>}

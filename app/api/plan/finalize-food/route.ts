@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: '餐厅确认请求无效。' }, { status: 400 });
   try {
     const plan = planStore.get(parsed.data.planId, parsed.data.revision);
-    const updated = await finalizeFoodPlan(plan, parsed.data.selections);
+    const updated = await finalizeFoodPlan(plan, parsed.data.selections, parsed.data.skippedManualInputs);
     return NextResponse.json(planStore.replace(parsed.data.planId, parsed.data.revision, updated), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : '最终路线生成失败。';

@@ -41,3 +41,11 @@ test('arrival day map order is station, arrival hotel, attractions and return ho
   assert.deepEqual(points.map(point => point.kind), ['station', 'hotel', 'attraction', 'attraction', 'hotel']);
   assert.deepEqual(points.slice(0, 2).map(point => point.name), ['杭州东站', '测试酒店']);
 });
+
+test('self-drive arrival still visits the booked hotel before attractions', () => {
+  const hotel = { poiId: 'hotel-1', name: '测试酒店', address: '酒店地址', lng: 120.12, lat: 30.22, verified: true };
+  const anchored = [{ ...days[0], arrivalHotel: hotel, arrivalHotelTime: '09:00', endHotel: hotel }];
+  const points = createRoutePoints(null, request, anchored, { meals: [] });
+  assert.deepEqual(points.map(point => point.kind), ['hotel', 'attraction', 'attraction', 'hotel']);
+  assert.deepEqual(points.filter(point => point.kind === 'hotel').map(point => point.hotelRole), ['arrival', 'end']);
+});

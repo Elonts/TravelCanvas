@@ -245,3 +245,11 @@
   .candidate-card { grid-template-columns: 1fr; }
   .candidate-image { min-height: 190px; }
 }
+.manual-restaurant-status { display: grid; gap: 13px; padding: 18px; background: var(--green-soft); border-radius: 13px; }
+.manual-restaurant-status h3, .manual-restaurant-status p { margin: 0; }
+.manual-restaurant-row { display: flex; justify-content: space-between; gap: 18px; padding: 13px; background: var(--paper); border: 1px solid var(--line); border-radius: 9px; }
+.manual-restaurant-row > div { display: grid; gap: 4px; min-width: 0; }
+.manual-restaurant-row span { color: var(--green); font-weight: 700; }
+.manual-restaurant-row small { color: var(--muted); overflow-wrap: anywhere; }
+.manual-restaurant-row.needs-action { background: var(--orange-soft); }
+@media (max-width: 520px) { .manual-restaurant-row { flex-direction: column; } }

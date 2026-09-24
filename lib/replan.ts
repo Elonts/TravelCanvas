@@ -52,11 +52,17 @@ export async function addRestaurantCandidates(plan: Plan, input: { mealId?: stri
     }
   }
   const matches: any[] = [];
+  const decisions: import('./food-types').ManualRestaurantDecision[] = [];
   for (const [name, candidates] of candidatesByName) {
-    if (candidates.length > 1) throw Error(`“${name}”匹配到多个分店：${candidates.slice(0, 3).map(candidate => `${candidate.name}（${candidate.address}）`).join('、')}。请填写完整分店名后重试`);
-    if (candidates[0]) matches.push(candidates[0]);
+    if (candidates.length > 1) {
+      decisions.push({ input: name, status: 'needs_branch', candidates: candidates.slice(0, 5).map(candidate => ({ restaurantId: candidate.poiId, name: candidate.name, address: candidate.address })), reasons: ['匹配到多个分店，请输入完整分店名称后重新核验。'] });
+      continue;
+    }
+    if (candidates[0]) matches.push({ ...candidates[0], inputName: name });
+    else decisions.push({ input: name, status: 'unassigned', reasons: ['没有在本次目的地中找到可核验的具体餐厅，请检查名称或补充分店。'] });
   }
-  if (!matches.length) throw Error('没有找到准确餐厅，请补充完整店名或分店名');
+  const previousDecisions = (plan.food.manualRestaurants || []).filter(item => !input.names.includes(item.input));
+  if (!matches.length) return { ...plan, food: { ...plan.food, manualRestaurants: [...previousDecisions, ...decisions] }, sources: { ...plan.sources, updatedAt: new Date().toISOString() } };
   const existing = plan.food.meals.flatMap(item => item.options.map(option => option.restaurant));
   const preferredRestaurants: Restaurant[] = [...existing, ...matches.map((place: any) => ({ id: place.poiId, city: place.city, preferred: true, ...(meal ? { preferredMealId: meal.slot.id } : {}), name: place.name, address: place.address, lng: place.lng, lat: place.lat, category: place.category, price: place.price || null, hours: place.hours || '', source: '用户输入 + 高德地图 POI', queriedAt: new Date().toISOString(), imageUrl: place.imageUrl || null, navigationUrl: place.navigationUrl || null, tips: [] }))];
   const generated = await rebuildFoodPlan(plan.request, plan.days, plan.budget, process.env, fetch, { mapIntervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400, preferredRestaurants, discoverySources: null });
@@ -74,7 +80,14 @@ export async function addRestaurantCandidates(plan: Plan, input: { mealId?: stri
     }
     generated.summary = summarizeFood(generated);
   }
-  const food = plan.phase === 'food_selection' ? asDraftFood(generated) : generated;
+  const food: FoodPlan = plan.phase === 'food_selection' ? asDraftFood(generated) : generated;
+  for (const place of matches) {
+    const assigned = food.meals.find(candidateMeal => (plan.phase === 'food_selection' ? candidateMeal.draftSelectedId : candidateMeal.selectedId) === place.poiId);
+    const option = assigned?.options.find(candidate => candidate.restaurant.id === place.poiId);
+    if (!assigned || !option) decisions.push({ input: place.inputName, restaurantId: place.poiId, matchedName: place.name, address: place.address, status: 'unassigned', reasons: ['已核验具体分店，但当前没有可容纳它的午餐或晚餐位置。'] });
+    else decisions.push({ input: place.inputName, restaurantId: place.poiId, matchedName: place.name, address: place.address, mealId: assigned.slot.id, mealLabel: `${assigned.slot.date} ${assigned.slot.label}`, dayIndex: assigned.slot.dayIndex, extraMinutes: option.extraMinutes, status: option.reasons.length || option.pending.length ? 'needs_risk_confirmation' : 'scheduled_draft', reasons: [...option.reasons, ...option.pending] });
+  }
+  food.manualRestaurants = [...previousDecisions, ...decisions];
   if (plan.phase === 'food_selection') return { ...plan, food, sources: { ...plan.sources, updatedAt: new Date().toISOString() } };
   const origin = plan.route.points.find(point => point.kind === 'origin') || null;
   const points = createRoutePoints(origin, plan.request, plan.days, food);
@@ -83,11 +96,19 @@ export async function addRestaurantCandidates(plan: Plan, input: { mealId?: stri
   return { ...plan, food, route, budgetMeta: budgetMeta(plan.request, route), sources: { ...plan.sources, map: route.state, updatedAt: new Date().toISOString() } };
 }
 
-export async function finalizeFoodPlan(plan: Plan, selections: { mealId: string; restaurantId: string | null; acceptWarnings: boolean }[]): Promise<Plan> {
+export async function finalizeFoodPlan(plan: Plan, selections: { mealId: string; restaurantId: string | null; acceptWarnings: boolean }[], skippedManualInputs: string[] = []): Promise<Plan> {
   if (plan.phase !== 'food_selection') throw Error('餐厅已经确认，无需重复生成最终路线');
   if (!process.env.AMAP_API_KEY) throw Error('高德服务未配置，无法生成含餐厅的最终路线');
   const selectedByMeal = new Map(selections.map(item => [item.mealId, item]));
   const food = structuredClone(plan.food);
+  const skipped = new Set(skippedManualInputs);
+  for (const decision of food.manualRestaurants || []) {
+    if (skipped.has(decision.input)) { decision.status = 'explicitly_skipped'; continue; }
+    if (!decision.restaurantId || !decision.mealId) throw Error(`指定餐厅“${decision.input}”尚未安排：${decision.reasons[0] || '请先处理分店或餐次'}`);
+    const chosen = selectedByMeal.get(decision.mealId);
+    const restaurantId = chosen ? chosen.restaurantId : food.meals.find(meal => meal.slot.id === decision.mealId)?.draftSelectedId;
+    if (restaurantId !== decision.restaurantId) throw Error(`指定餐厅“${decision.matchedName || decision.input}”没有进入任何餐次，请重新选择它或明确跳过`);
+  }
   for (const meal of food.meals) {
     const selection = selectedByMeal.get(meal.slot.id);
     const restaurantId = selection ? selection.restaurantId : meal.draftSelectedId || null;
@@ -99,6 +120,7 @@ export async function finalizeFoodPlan(plan: Plan, selections: { mealId: string;
     meal.selectedId = restaurantId; meal.draftSelectedId = restaurantId; meal.locked = Boolean(option.reasons.length || option.pending.length);
   }
   food.summary = summarizeFood(food);
+  food.manualRestaurants = (food.manualRestaurants || []).map(decision => decision.status === 'explicitly_skipped' ? decision : { ...decision, status: 'finalized' as const, reasons: decision.reasons });
   const map = createMapProvider(process.env, fetch, { intervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400 });
   const origin = plan.route.points.find(point => point.kind === 'origin') || null;
   const points = createRoutePoints(origin, plan.request, plan.days, food);

@@ -40,8 +40,17 @@ export type MealOption = {
 export type Meal = {
   slot: MealSlot; options: MealOption[]; selectedId: string | null; draftSelectedId?: string | null; locked: boolean;
 };
+export type ManualRestaurantDecision = {
+  input: string;
+  status: 'needs_branch' | 'scheduled_draft' | 'needs_risk_confirmation' | 'unassigned' | 'explicitly_skipped' | 'finalized';
+  restaurantId?: string; matchedName?: string; address?: string;
+  candidates?: { restaurantId: string; name: string; address: string }[];
+  mealId?: string; mealLabel?: string; dayIndex?: number; extraMinutes?: number | null;
+  reasons: string[];
+};
 export type FoodPlan = {
   meals: Meal[]; sources: EvidenceSource[]; tips: EvidenceTip[]; warnings: string[];
+  manualRestaurants: ManualRestaurantDecision[];
   searchState: 'live' | 'pending'; queriedAt: string;
   summary: { allocated: number; breakfastReserve: number; selectedLow: number;
     selectedHigh: number; selectedCostPending: number; extraTransport: number; unresolved: number; remaining: number };
