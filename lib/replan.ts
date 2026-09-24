@@ -9,15 +9,35 @@ import type { FoodPlan, Restaurant } from './food-types';
 import { verifyDayReservations } from './reservations.mjs';
 import { amapImageAttribution, fillMissingWebImages } from './web-images.mjs';
 import { ENTERTAINMENT_RADIUS_METERS, ENTERTAINMENT_TYPES } from './entertainment';
-import { scheduleDay } from './day-schedule.mjs';
+import { scheduleEntertainmentByAnchors } from './day-schedule.mjs';
 import { asDraftFood, summarizeFood } from './food.mjs';
 
 const normalize = (value: string) => value.replace(/[\s（）()·]/g, '').toLowerCase();
 const rebuildFoodPlan = buildFoodPlan as unknown as (request: Plan['request'], days: Plan['days'], budget: Plan['budget'], env: NodeJS.ProcessEnv, fetcher: typeof fetch, options: { mapIntervalMs: number; preferredRestaurants: Restaurant[]; discoverySources: FoodPlan['sources'] | null }) => Promise<FoodPlan>;
+const minutes = (value?: string | null) => value && /^\d{2}:\d{2}$/.test(value) ? Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5)) : null;
+const clockTime = (value: number) => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
+
+function entertainmentAnchors(plan: Plan, dayIndex: number) {
+  const day = plan.days[dayIndex];
+  return plan.route.points.filter(point => point.date === day.date && ['hotel', 'attraction', 'restaurant'].includes(point.kind)).map(point => {
+    if (point.kind === 'attraction') {
+      const stop = day.stops.find(candidate => `stop:${day.date}:${candidate.id}` === point.id);
+      const start = minutes(stop?.time) ?? 540;
+      return { id: point.id, name: point.name, start, end: start + (stop?.durationMinutes || 90), stopId: stop?.id };
+    }
+    if (point.kind === 'restaurant') {
+      const meal = plan.food.meals.find(candidate => `meal:${candidate.slot.id}` === point.id);
+      const option = meal?.options.find(candidate => candidate.restaurant.id === meal.selectedId);
+      return { id: point.id, name: point.name, start: option?.arrival ?? meal?.slot.earliest ?? 720, end: option?.finish ?? ((meal?.slot.earliest ?? 720) + plan.request.mealMinutes + plan.request.queueMinutes) };
+    }
+    const start = point.hotelRole === 'start' ? 510 : point.hotelRole === 'arrival' ? minutes(day.arrivalHotelTime) ?? 540 : minutes(day.endHotelTime) ?? minutes(day.mustFinishBy) ?? 1290;
+    return { id: point.id, name: point.name, start, end: point.hotelRole === 'arrival' ? start + 30 : start, hotelRole: point.hotelRole };
+  }).sort((a, b) => a.start - b.start);
+}
 
 function asAttraction(candidate: any, old: Stop, queriedAt: string): Stop {
   return {
-    ...old, id: `replacement-${candidate.poiId}`, poiId: candidate.poiId, kind: 'attraction', name: candidate.name,
+    ...old, poiId: candidate.poiId, kind: 'attraction', name: candidate.name,
     address: candidate.address, lng: candidate.lng, lat: candidate.lat, verified: true, navigationUrl: candidate.navigationUrl,
     imageUrl: candidate.imageUrl, imageAttribution: amapImageAttribution(candidate.imageUrl, queriedAt), detail: '你指定并经高德重新核验的景点；门票、开放时间和预约规则请在出发前确认。',
     reservation: { status: 'unknown', message: '预约要求待确认，请在出发前查看景区官方渠道。', sourceUrl: null, queriedAt },
@@ -151,17 +171,22 @@ export async function replanDay(plan: Plan, change: { dayIndex: number; replacem
   const entertainment = plan.entertainmentDays[change.dayIndex];
   const selectedEntertainment = change.entertainmentSelections.map(selection => {
     const option = entertainment?.options.find(candidate => candidate.id === selection.id);
-    return option ? { ...option, period: selection.period } : null;
+    return option && option.anchorPointId === selection.anchorPointId && option.position === selection.position ? option : null;
   });
   if (selectedEntertainment.some(option => !option)) throw Error('娱乐地点选项已失效，请重新生成方案');
   const selectedEntertainmentStops = selectedEntertainment.filter((option): option is NonNullable<typeof option> => Boolean(option));
-  let newDay = { ...day, stops: scheduleDay(attractions, selectedEntertainmentStops) };
+  const anchors = entertainmentAnchors(plan, change.dayIndex);
+  const scheduledStops = scheduleEntertainmentByAnchors(attractions, selectedEntertainmentStops, anchors, minutes(day.availableFrom) ?? 540, minutes(day.mustFinishBy) ?? 1290) as Stop[];
+  const lastStop = scheduledStops.at(-1);
+  const recalculatedHotelTime = lastStop && day.endHotel ? clockTime((minutes(lastStop.time) ?? 0) + (lastStop.durationMinutes || 90) + 30) : day.endHotelTime;
+  let newDay = { ...day, stops: scheduledStops, endHotelTime: recalculatedHotelTime };
   newDay = await verifyDayReservations(newDay);
   newDay.title = `第 ${change.dayIndex + 1} 天 · ${day.city} · ${newDay.stops[0]?.name || '待补充地点'}`;
   const days = plan.days.map((value, index) => index === change.dayIndex ? newDay : value);
   const preferredRestaurants = plan.food.meals.flatMap(meal => meal.options.map(option => option.restaurant));
   const foodDays = days;
   const food = await rebuildFoodPlan(plan.request, foodDays, plan.budget, process.env, fetch, { mapIntervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400, preferredRestaurants, discoverySources: plan.food.sources });
+  food.manualRestaurants = plan.food.manualRestaurants || [];
   const origin = plan.route.points.find(point => point.kind === 'origin') || null;
   const points = createRoutePoints(origin, plan.request, days, food);
   const paths = await routePaths(plan, points, map);
@@ -169,17 +194,22 @@ export async function replanDay(plan: Plan, change: { dayIndex: number; replacem
   const dayBudget = Object.values(plan.budget).reduce((sum, value) => sum + value, 0) / plan.request.days;
   const booked = newDay.endHotel || newDay.startHotel;
   const hotels = booked ? [{ id: booked.id, title: '已预订酒店', area: booked.name, rationale: '酒店已作为当天路线起点或终点参与道路规划。', filters: '地点已由高德核验', priceGuide: '已预订，费用未计入实时估算', ctripUrl: '', query: booked.name, booked: true, address: booked.address, navigationUrl: booked.navigationUrl }] : recommendHotels({ destination: day.city, days: 1, budget: dayBudget, travelers: plan.request.travelers, preferences: plan.request.preferences || '', stops: newDay.stops });
-  const dayGuides = plan.dayGuides.map((guide, index) => index === change.dayIndex ? { ...guide, hotels, reminders: [(guide.weather.rain ?? 0) >= 50 ? '降水概率较高，带伞并优先保留室内备选。' : guide.weather.state === 'pending' ? '该日期暂无可靠天气预报，请临近出发时再次查询。' : '天气适合按计划出行，仍建议准备防晒和饮水。', newDay.stops.some(stop => stop.kind === 'entertainment') ? '已按所选时间段加入娱乐活动，请再次确认营业时间、消费和返程方式。' : '本日未安排娱乐活动，可在下拉框选择后统一保存。', '景区预约要求会变化，状态为待确认时请查看景区官方渠道。'] } : guide);
+  const dayGuides = plan.dayGuides.map((guide, index) => index === change.dayIndex ? { ...guide, hotels, reminders: [(guide.weather.rain ?? 0) >= 50 ? '降水概率较高，带伞并优先保留室内备选。' : guide.weather.state === 'pending' ? '该日期暂无可靠天气预报，请临近出发时再次查询。' : '天气适合按计划出行，仍建议准备防晒和饮水。', newDay.stops.some(stop => stop.kind === 'entertainment') ? '娱乐活动已按指定行程点前后插入，请再次确认营业时间、消费和返程方式。' : '本日未安排娱乐活动，可选择行程点前后再查询。', '景区预约要求会变化，状态为待确认时请查看景区官方渠道。'] } : guide);
   const entertainmentDays = plan.entertainmentDays.map((value, index) => index === change.dayIndex ? { ...value, selections: change.entertainmentSelections } : value);
   return { ...plan, days, food, route, budgetMeta: budgetMeta(plan.request, route), dayGuides, entertainmentDays, sources: { ...plan.sources, map: route.state, updatedAt: new Date().toISOString() } };
 }
 
-export async function searchEntertainment(plan: Plan, input: { dayIndex: number; preference: string; query: string; selectedIds: string[] }): Promise<Plan> {
+export async function searchEntertainment(plan: Plan, input: { dayIndex: number; preference: string; query: string; anchorPointId: string; position: 'before' | 'after'; selectedIds: string[] }): Promise<Plan> {
   const day = plan.days[input.dayIndex];
   if (!day) throw Error('要查询的日期不存在');
   if (!process.env.AMAP_API_KEY) throw Error('高德服务未配置，无法查询娱乐地点');
-  const anchor = day.endHotel || day.stops.filter(stop => stop.kind !== 'entertainment').at(-1);
+  const routePoints = plan.route.points.filter(point => point.date === day.date && point.kind !== 'origin' && point.kind !== 'entertainment');
+  const anchorIndex = routePoints.findIndex(point => point.id === input.anchorPointId);
+  const anchor = routePoints[anchorIndex];
   if (!anchor?.verified) throw Error('当天路线缺少已核验坐标，无法筛选顺路地点');
+  if (!['hotel', 'attraction', 'restaurant'].includes(anchor.kind)) throw Error('请选择酒店、景点或已确认餐厅作为娱乐活动锚点');
+  if (anchor.kind === 'hotel' && anchor.hotelRole === 'start' && input.position === 'before') throw Error('当天出发酒店之前不能安排娱乐活动');
+  if (anchor.kind === 'hotel' && anchor.hotelRole === 'end' && input.position === 'after') throw Error('当天返回酒店之后不能安排娱乐活动');
   if (!(ENTERTAINMENT_TYPES as readonly string[]).includes(input.preference) && input.preference !== '其他') throw Error('请选择有效的娱乐类型');
   if (input.preference === '其他' && input.query.length < 2) throw Error('选择“其他”时，请输入想找的娱乐项目');
   const currentEntertainment = plan.entertainmentDays[input.dayIndex];
@@ -190,17 +220,23 @@ export async function searchEntertainment(plan: Plan, input: { dayIndex: number;
     ? [activity, `${day.city} ${activity}`, `${anchor.name}附近 ${activity}`]
     : input.query ? [`${activity} ${input.query}`, `${input.query} ${activity}`, `${anchor.name}附近 ${activity}`, activity] : [`${anchor.name}附近 ${activity}`, `${day.city} ${activity}`, activity];
   const candidates = await map.discover(day.city, 'entertainment', keywords, 30, plan.request.transport);
+  const adjacent = input.position === 'before' ? routePoints[anchorIndex - 1] : routePoints[anchorIndex + 1];
   const routed = await Promise.all(candidates.map(async (candidate: any) => {
-    const route = await map.route(anchor, candidate, plan.request.transport, day.city);
+    const first = await map.route(input.position === 'before' ? adjacent || anchor : anchor, candidate, plan.request.transport, day.city);
+    const second = adjacent ? await map.route(candidate, input.position === 'before' ? anchor : adjacent, plan.request.transport, day.city) : null;
+    const direct = adjacent ? await map.route(input.position === 'before' ? adjacent : anchor, input.position === 'before' ? anchor : adjacent, plan.request.transport, day.city) : null;
+    const routeMinutes = first.minutes === null || (second && second.minutes === null) ? null : (first.minutes || 0) + (second?.minutes || 0);
+    const routeMeters = first.meters === null || (second && second.meters === null) ? null : (first.meters || 0) + (second?.meters || 0);
+    const insertionExtraMinutes = routeMinutes === null ? null : Math.max(0, routeMinutes - (direct?.minutes || 0));
     const queriedAt = new Date().toISOString();
-    return { id: `entertainment-${candidate.poiId}`, poiId: candidate.poiId, city: candidate.city, kind: 'entertainment' as const, name: candidate.name,
+    return { id: `entertainment-${candidate.poiId}-${input.dayIndex}-${input.position}`, poiId: candidate.poiId, city: candidate.city, kind: 'entertainment' as const, name: candidate.name,
       address: candidate.address, lng: candidate.lng, lat: candidate.lat, verified: true, navigationUrl: candidate.navigationUrl, imageUrl: candidate.imageUrl, imageAttribution: amapImageAttribution(candidate.imageUrl, queriedAt),
-      time: '19:30', detail: `按“${activity}${input.preference !== '其他' && input.query ? ` · ${input.query}` : ''}”查询并结合当天路线筛选；营业和消费请确认。`, duration: '约 1.5 小时', durationMinutes: 90,
-      cost: 0, costPending: true, indoor: true, routeMinutes: route.minutes, routeMeters: route.meters, preference: input.preference === '其他' ? `其他：${activity}` : input.preference };
+      time: '', detail: `安排在“${anchor.name}”${input.position === 'before' ? '之前' : '之后'}；营业和消费请确认。`, duration: '约 1.5 小时', durationMinutes: 90,
+      cost: 0, costPending: true, indoor: true, routeMinutes, routeMeters, insertionExtraMinutes, anchorPointId: anchor.id, position: input.position, preference: input.preference === '其他' ? `其他：${activity}` : input.preference };
   }));
   const found = await fillMissingWebImages(routed.filter(option => option.routeMeters !== null && option.routeMeters <= ENTERTAINMENT_RADIUS_METERS).sort((a, b) => (a.routeMeters ?? Infinity) - (b.routeMeters ?? Infinity) || (a.routeMinutes ?? Infinity) - (b.routeMinutes ?? Infinity)).slice(0, 12), process.env, fetch);
   const entertainmentDays = plan.entertainmentDays.map((value, index) => index === input.dayIndex ? {
-    ...value, anchorName: anchor.name, options: [...value.options.filter(option => input.preference === '其他' ? !option.preference.startsWith('其他：') : option.preference !== input.preference), ...found],
+    ...value, anchorName: anchor.name, options: [...value.options.filter(option => !(option.anchorPointId === anchor.id && option.position === input.position && (input.preference === '其他' ? option.preference.startsWith('其他：') : option.preference === input.preference))), ...found],
     warning: found.length ? found.length < 4 ? `在当天路线 15 公里范围内仅核验到 ${found.length} 个${activity}地点，可补充区域或店名再次查询。` : undefined : `没有找到距当天路线 15 公里以内的${activity}地点。`,
   } : value);
   return { ...plan, entertainmentDays, sources: { ...plan.sources, updatedAt: new Date().toISOString() } };

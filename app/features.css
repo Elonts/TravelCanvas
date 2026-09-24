@@ -252,4 +252,7 @@
 .manual-restaurant-row span { color: var(--green); font-weight: 700; }
 .manual-restaurant-row small { color: var(--muted); overflow-wrap: anywhere; }
 .manual-restaurant-row.needs-action { background: var(--orange-soft); }
+.entertainment-anchor { display: grid; grid-template-columns: minmax(0, 2fr) minmax(150px, 1fr); gap: 13px; align-items: end; }
+.entertainment-anchor label { min-width: 0; }
 @media (max-width: 520px) { .manual-restaurant-row { flex-direction: column; } }
+@media (max-width: 520px) { .entertainment-anchor { grid-template-columns: 1fr; } }

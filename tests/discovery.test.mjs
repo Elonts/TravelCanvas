@@ -36,6 +36,33 @@ test('discovery store replaces progressive guide enrichment without changing its
   assert.equal(store.get(saved.discoveryId).candidates[0].id, 'hz2');
 });
 
+test('a manually kept child attraction cannot be selected together with its main scenic area', () => {
+  const store = new DiscoveryStore();
+  const saved = store.save({ request: { destinations: ['珠海'] }, candidates: [
+    { id: 'main', city: '珠海', kind: 'attraction', name: '圆明新园', rootPoiId: 'main-poi' },
+    { id: 'child', city: '珠海', kind: 'attraction', name: '圆明新园-万花阵', rootPoiId: 'main-poi' },
+  ] });
+  assert.throws(() => store.select(saved.discoveryId, ['main', 'child']), /同一主景区/);
+});
+
+test('discovery selection collapses duplicate records for the same verified place', () => {
+  const store = new DiscoveryStore();
+  const saved = store.save({ request: { destinations: ['杭州'] }, candidates: [
+    { id: 'first', poiId: 'same-poi', city: '杭州', kind: 'attraction', name: '西湖风景名胜区', rootPoiId: 'same-poi' },
+    { id: 'second', poiId: 'same-poi', city: '杭州', kind: 'attraction', name: '西湖风景名胜区', rootPoiId: 'same-poi' },
+  ] });
+  assert.deepEqual(store.select(saved.discoveryId, ['first', 'second']).candidates.map(item => item.id), ['first']);
+});
+
+test('identical provider ids from different cities are not collapsed together', () => {
+  const store = new DiscoveryStore();
+  const saved = store.save({ request, candidates: [
+    { id: 'hz', poiId: 'fixture-poi', city: '杭州', kind: 'attraction', name: '杭州景区' },
+    { id: 'bj', poiId: 'fixture-poi', city: '北京', kind: 'attraction', name: '北京景区' },
+  ] });
+  assert.deepEqual(store.select(saved.discoveryId, ['hz', 'bj']).candidates.map(item => item.id), ['hz', 'bj']);
+});
+
 test('AMap navigation links encode a verified China coordinate and transport mode', () => {
   const url = new URL(amapNavigationUrl({ name: '西湖风景名胜区', lng: 120.1, lat: 30.2 }, 'drive'));
   assert.equal(url.origin, 'https://uri.amap.com');

@@ -49,3 +49,10 @@ test('self-drive arrival still visits the booked hotel before attractions', () =
   assert.deepEqual(points.map(point => point.kind), ['hotel', 'attraction', 'attraction', 'hotel']);
   assert.deepEqual(points.filter(point => point.kind === 'hotel').map(point => point.hotelRole), ['arrival', 'end']);
 });
+
+test('entertainment route points stay immediately before or after their selected anchor', () => {
+  const anchoredStopId = `stop:${days[0].date}:${stops[0].id}`;
+  const entertainment = { id: 'fun', poiId: 'fun-poi', kind: 'entertainment', name: '测试剧本杀', time: '11:00', lng: 120.11, lat: 30.21, verified: true, anchorPointId: anchoredStopId, position: 'after' };
+  const points = createRoutePoints(null, request, [{ ...days[0], stops: [stops[0], entertainment, stops[1]] }], { meals: [] });
+  assert.deepEqual(points.map(point => point.name), ['景点甲', '测试剧本杀', '景点乙']);
+});

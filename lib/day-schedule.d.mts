@@ -1,2 +1,2 @@
-export const entertainmentPeriodRanges: Record<'morning' | 'afternoon' | 'evening', { start: number; end: number }>;
-export function scheduleDay<T extends { durationMinutes?: number; period?: 'morning' | 'afternoon' | 'evening'; routeMeters?: number | null }>(attractions: T[], entertainment: T[]): T[];
+export type ScheduleAnchor = { id: string; name: string; start: number; end: number; stopId?: string; hotelRole?: 'start' | 'arrival' | 'end' };
+export function scheduleEntertainmentByAnchors<T extends { time: string }, E extends { anchorPointId: string; position: 'before' | 'after'; durationMinutes?: number; insertionExtraMinutes?: number | null }>(attractions: T[], entertainment: E[], anchors: ScheduleAnchor[], availableFrom?: number, mustFinishBy?: number): (T | (E & { time: string }))[];

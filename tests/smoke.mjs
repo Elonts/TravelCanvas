@@ -105,11 +105,14 @@ for (const mode of ['fixtures', 'offline']) {
     assert.equal((await action('select', 'forged-id')).status, 409);
     assert.equal((await post('/api/food', { planId: plan.planId, revision: 0, mealId, action: 'lock' })).status, 409);
 
-    const customEntertainment = await post('/api/plan/entertainment', { planId: plan.planId, revision: plan.revision, dayIndex: 0, preference: '其他', query: '密室逃脱' });
+    const dayRoutePoints = plan.route.points.filter(point => point.date === plan.days[0].date);
+    const entertainmentAnchor = dayRoutePoints.find(point => point.kind === 'hotel' && point.hotelRole === 'end') || dayRoutePoints.filter(point => point.kind === 'restaurant').at(-1) || dayRoutePoints.filter(point => point.kind === 'attraction').at(-1);
+    const entertainmentPosition = entertainmentAnchor.kind === 'hotel' ? 'before' : 'after';
+    const customEntertainment = await post('/api/plan/entertainment', { planId: plan.planId, revision: plan.revision, dayIndex: 0, preference: '其他', query: '密室逃脱', anchorPointId: entertainmentAnchor.id, position: entertainmentPosition });
     assert.equal(customEntertainment.status, 200, JSON.stringify(customEntertainment.value));
     plan = customEntertainment.value;
     assert.ok(plan.entertainmentDays[0].options.some(option => option.preference === '其他：密室逃脱'));
-    const searchedEntertainment = await post('/api/plan/entertainment', { planId: plan.planId, revision: plan.revision, dayIndex: 0, preference: '足浴', query: '', selectedIds: [] });
+    const searchedEntertainment = await post('/api/plan/entertainment', { planId: plan.planId, revision: plan.revision, dayIndex: 0, preference: '足浴', query: '', anchorPointId: entertainmentAnchor.id, position: entertainmentPosition, selectedIds: [] });
     assert.equal(searchedEntertainment.status, 200, JSON.stringify(searchedEntertainment.value));
     plan = searchedEntertainment.value;
     const footMassageOptions = plan.entertainmentDays[0].options.filter(option => option.preference === '足浴');
@@ -117,12 +120,15 @@ for (const mode of ['fixtures', 'offline']) {
     assert.ok(footMassageOptions.length <= 12);
     assert.ok(footMassageOptions.every(option => option.routeMeters !== null && option.routeMeters <= 15000));
     const entertainmentId = footMassageOptions[0].id;
-    const addedEntertainment = await post('/api/plan/day', { planId: plan.planId, revision: plan.revision, dayIndex: 0, replacements: [], removedStopIds: [], entertainmentSelections: [{ id: entertainmentId, period: 'afternoon' }] });
+    const selection = { id: entertainmentId, anchorPointId: entertainmentAnchor.id, position: entertainmentPosition };
+    const addedEntertainment = await post('/api/plan/day', { planId: plan.planId, revision: plan.revision, dayIndex: 0, replacements: [], removedStopIds: [], entertainmentSelections: [selection] });
     assert.equal(addedEntertainment.status, 200, JSON.stringify(addedEntertainment.value));
     plan = addedEntertainment.value;
     assert.ok(plan.days[0].stops.some(stop => stop.kind === 'entertainment'));
-    assert.deepEqual(plan.entertainmentDays[0].selections, [{ id: entertainmentId, period: 'afternoon' }]);
-    assert.equal(plan.days[0].stops.find(stop => stop.id === entertainmentId).time, '13:30');
+    assert.deepEqual(plan.entertainmentDays[0].selections, [selection]);
+    const entertainmentPointIndex = plan.route.points.findIndex(point => point.poiId === footMassageOptions[0].poiId);
+    const anchorPointIndex = plan.route.points.findIndex(point => point.id === entertainmentAnchor.id);
+    assert.equal(entertainmentPosition === 'before' ? entertainmentPointIndex + 1 : anchorPointIndex + 1, entertainmentPosition === 'before' ? anchorPointIndex : entertainmentPointIndex);
 
     const replacementStop = plan.days[0].stops.find(stop => stop.kind !== 'entertainment');
     const changedDay = await post('/api/plan/day', { planId: plan.planId, revision: plan.revision, dayIndex: 0, replacements: [{ stopId: replacementStop.id, name: '雷峰塔' }], removedStopIds: [], entertainmentSelections: [] });

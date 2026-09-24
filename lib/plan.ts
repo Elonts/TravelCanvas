@@ -27,9 +27,8 @@ export type IntercityTransfer = RouteLeg & { transport: 'transit' | 'drive'; mod
 export type RouteOverview = { points: RoutePoint[]; paths: RoutePath[]; transfers: IntercityTransfer[]; cityOrder: string[]; source: '高德地图' | '顺序示意'; state: DataState; queriedAt: string; note: string };
 type Weather = WeatherSnapshot;
 export type DayGuide = { date: string; city: string; weather: Weather; hotels: HotelRecommendation[]; reminders: string[] };
-export type EntertainmentOption = Stop & { routeMinutes: number | null; routeMeters: number | null; preference: string };
-export type EntertainmentPeriod = 'morning' | 'afternoon' | 'evening';
-export type EntertainmentSelection = { id: string; period: EntertainmentPeriod };
+export type EntertainmentOption = Stop & { routeMinutes: number | null; routeMeters: number | null; insertionExtraMinutes: number | null; preference: string; anchorPointId: string; position: 'before' | 'after' };
+export type EntertainmentSelection = { id: string; anchorPointId: string; position: 'before' | 'after' };
 export type DayEntertainment = { dayIndex: number; anchorName: string; selections: EntertainmentSelection[]; options: EntertainmentOption[]; warning?: string };
 export type BudgetMeta = { transportMode: string; rule: string; knownTransportCost: number; pendingLegs: number };
 export type Plan = { planId?: string; revision?: number; phase: 'food_selection' | 'final'; food: FoodPlan; guides: GuideSource[]; request: TripRequest; days: Day[]; route: RouteOverview; budget: Record<string, number>; budgetMeta: BudgetMeta; weather: Weather; hotels: HotelRecommendation[]; dayGuides: DayGuide[]; entertainmentDays: DayEntertainment[]; sources: { ai: DataState; map: DataState; weather: DataState; hotel: DataState; updatedAt: string }; risks: string[] };
@@ -172,7 +171,7 @@ export async function buildPlan(request: TripRequest, selected: DiscoveryCandida
   const dailyWeatherPromise = Promise.all(days.map(day => queryWeather(day.city, day.date, orderedCities.destinations.find(item => item.name === day.city)?.location || null)));
   const [dailyWeather, generatedFood] = await Promise.all([dailyWeatherPromise, buildSelectedFoodPlan(request, days, budget, process.env, fetch, { mapIntervalMs: testMapInterval, preferredRestaurants, discoverySources: reusedSources })]);
   const food = asDraftFood(generatedFood);
-  const entertainmentDays: DayEntertainment[] = days.map((day, dayIndex) => ({ dayIndex, anchorName: day.stops.at(-1)?.name || day.startHotel?.name || '', selections: [], options: [], warning: '请先选择娱乐类型和时间段，再按当天路线查找具体地点。' }));
+  const entertainmentDays: DayEntertainment[] = days.map((day, dayIndex) => ({ dayIndex, anchorName: day.stops.at(-1)?.name || day.startHotel?.name || '', selections: [], options: [], warning: '请先选择当天一个行程点及“之前/之后”，再查找附近娱乐地点。' }));
   const orderedStops = days.flatMap(day => day.stops);
   const weatherData = dailyWeather[0] || await queryWeather(primaryCity, request.startDate, orderedCities.destinations[0]?.location || null);
   const cityLocations = new Map<string, GeoPoint>();
