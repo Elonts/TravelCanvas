@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { allocateBudget, createMealSlots, evaluateRestaurant, isOpenDuring, changeMeal, summarizeFood, shortlistRestaurants } from '../lib/food.mjs';
+import { allocateBudget, asDraftFood, changeDraftMeal, createMealSlots, evaluateRestaurant, isOpenDuring, changeMeal, summarizeFood, shortlistRestaurants } from '../lib/food.mjs';
 import { requestSchema, dayReplanSchema, readJson } from '../lib/requests.mjs';
 import { PlanStore } from '../lib/plan-store.mjs';
 
@@ -115,6 +115,24 @@ test('swap recalculates totals without mutating snapshot; lock and unavailable t
   assert.throws(() => changeMeal(locked, slot.id, 'cheaper'), /解锁/);
   assert.throws(() => changeMeal(food, slot.id, 'select', 'forged-id'), /没有符合/);
   assert.throws(() => changeMeal(food, 'missing', 'lock'), /不存在/);
+});
+test('draft meals keep restaurant choices out of the route until final confirmation', () => {
+  const draft = asDraftFood(food);
+  assert.equal(draft.meals[0].selectedId, null);
+  assert.equal(draft.meals[0].draftSelectedId, 'r1');
+  const cheaper = changeDraftMeal(draft, slot.id, 'cheaper');
+  assert.equal(cheaper.meals[0].selectedId, null);
+  assert.equal(cheaper.meals[0].draftSelectedId, 'r2');
+  const skipped = changeDraftMeal(cheaper, slot.id, 'skip');
+  assert.equal(skipped.meals[0].draftSelectedId, null);
+});
+test('a draft restaurant can move to its least-detour alternative meal', () => {
+  const secondSlot = { ...slot, id: 'dinner-2', label: '晚餐', date: '2026-09-11' };
+  const shared = { ...option, extraMinutes: 3 };
+  const draft = asDraftFood({ ...food, meals: [food.meals[0], { ...food.meals[0], slot: secondSlot, options: [shared], selectedId: null }] });
+  const moved = changeDraftMeal(draft, slot.id, 'move');
+  assert.equal(moved.meals[0].draftSelectedId, null);
+  assert.equal(moved.meals[1].draftSelectedId, 'r1');
 });
 test('server store enforces revision, immutable snapshots, expiry and bounded capacity', () => {
   let time = 0; const store = new PlanStore({ clock: () => time, ttl: 100, limit: 1 });

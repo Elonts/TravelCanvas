@@ -2,7 +2,7 @@
 
 import { FormEvent, Fragment, useEffect, useState } from 'react';
 import type { EntertainmentPeriod, EntertainmentSelection, Plan } from '../lib/plan';
-import { FoodSummary, MealCard, SourceTip, type MealAction, type RestaurantSearchAction } from './food-view';
+import { FoodDraftControls, FoodSummary, MealCard, SourceTip, type MealAction, type RestaurantSearchAction } from './food-view';
 import { CityMultiSelect } from './city-multi-select';
 import { JourneyCanvas } from './journey-canvas';
 import { CandidatePicker } from './candidate-picker';
@@ -98,13 +98,22 @@ export default function Home() {
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
     } catch (e) { setChangeError(userFacingRequestError(e, '调整失败')); } finally { setChanging(false); }
   };
-  const searchRestaurants: RestaurantSearchAction = async (mealId, names) => {
+  const searchRestaurants: RestaurantSearchAction = async (names, mealId) => {
     if (!plan || changing || loading) return;
     setChanging(true); setChangeError('');
     try {
-      const response = await fetch('/api/plan/restaurants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, mealId, names }) });
+      const response = await fetch('/api/plan/restaurants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, ...(mealId ? { mealId } : {}), names }) });
       const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
     } catch (e) { setChangeError(userFacingRequestError(e, '餐厅查询失败')); } finally { setChanging(false); }
+  };
+  const finalizeFood = async (acceptedWarnings: Set<string>) => {
+    if (!plan || changing || loading) return;
+    setChanging(true); setChangeError('');
+    try {
+      const selections = plan.food.meals.map(meal => ({ mealId: meal.slot.id, restaurantId: meal.draftSelectedId || null, acceptWarnings: acceptedWarnings.has(meal.slot.id) }));
+      const response = await fetch('/api/plan/finalize-food', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: plan.planId, revision: plan.revision, selections }) });
+      const json = await response.json(); if (!response.ok) throw Error(json.error); setPlan(json);
+    } catch (e) { setChangeError(userFacingRequestError(e, '最终路线生成失败')); } finally { setChanging(false); }
   };
   const searchEntertainment = async (dayIndex: number, preference: string, query: string, selectedIds: string[]) => {
     if (!plan?.planId || plan.revision === undefined || changing || loading) return;
@@ -179,13 +188,13 @@ export default function Home() {
         {discovery && (candidateExpanded
           ? <CandidatePicker discovery={discovery} selectedIds={selectedIds} busy={loading} guideBusy={guidesLoading} error={plan ? '' : error} onToggle={toggleCandidate} onGenerate={generatePlan} onAddCustom={addCustomCandidates} onRetryGuides={() => refreshGuides(discovery.discoveryId)} />
           : <section className="candidate-summary panel"><div><span className="eyebrow">02 / 选择想去的地方</span><h2>已收起景区候选</h2><p>已选 {discovery.candidates.filter(candidate => selectedIds.includes(candidate.id) && candidate.kind === 'attraction').length} 个景区。餐厅已按生成后的基础路线另行查询；展开修改景区后需重新生成路线。</p></div><button type="button" className="secondary" onClick={() => setCandidateExpanded(true)}>展开并修改选择</button></section>)}
-        {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} onSearchRestaurants={searchRestaurants} onSearchEntertainment={searchEntertainment} onReplanDay={replanDay} changeError={changeError} />}
+        {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} onSearchRestaurants={searchRestaurants} onFinalizeFood={finalizeFood} onSearchEntertainment={searchEntertainment} onReplanDay={replanDay} changeError={changeError} />}
       </div>}
     </section>
   </main>;
 }
 
-function PlanView({ plan, busy, onAction, onSearchRestaurants, onSearchEntertainment, onReplanDay, changeError }: { plan: Plan; busy: boolean; onAction: MealAction; onSearchRestaurants: RestaurantSearchAction; onSearchEntertainment: (dayIndex: number, preference: string, query: string, selectedIds: string[]) => Promise<void>; onReplanDay: (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentSelections: EntertainmentSelection[]) => Promise<void>; changeError: string }) {
+function PlanView({ plan, busy, onAction, onSearchRestaurants, onFinalizeFood, onSearchEntertainment, onReplanDay, changeError }: { plan: Plan; busy: boolean; onAction: MealAction; onSearchRestaurants: RestaurantSearchAction; onFinalizeFood: (acceptedWarnings: Set<string>) => Promise<void>; onSearchEntertainment: (dayIndex: number, preference: string, query: string, selectedIds: string[]) => Promise<void>; onReplanDay: (dayIndex: number, replacements: { stopId: string; name: string }[], entertainmentSelections: EntertainmentSelection[]) => Promise<void>; changeError: string }) {
   const [activeDay, setActiveDay] = useState(0);
   const [replacementNames, setReplacementNames] = useState<Record<string, string>>({});
   const [entertainmentSelections, setEntertainmentSelections] = useState<Record<number, EntertainmentSelection[]>>({});
@@ -193,9 +202,11 @@ function PlanView({ plan, busy, onAction, onSearchRestaurants, onSearchEntertain
   const [entertainmentTypes, setEntertainmentTypes] = useState<Record<number, string>>({});
   const [entertainmentQueries, setEntertainmentQueries] = useState<Record<number, string>>({});
   const [venueChoices, setVenueChoices] = useState<Record<number, string>>({});
+  const [acceptedFoodWarnings, setAcceptedFoodWarnings] = useState<Set<string>>(new Set());
   useEffect(() => {
     setReplacementNames({});
-  }, [plan.planId]);
+    setAcceptedFoodWarnings(new Set());
+  }, [plan.planId, plan.revision]);
   const total = Object.values(plan.budget).reduce((a, b) => a + b, 0);
   const labels: Record<string, string> = { transport: '交通建议上限', stay: '住宿建议上限', food: '餐饮建议上限', activities: '景点与娱乐建议上限', remaining: '剩余可用预算（未安排）' };
   const attachedNames = new Set(plan.days.flatMap(day => day.stops.map(stop => stop.name)));
@@ -212,6 +223,11 @@ function PlanView({ plan, busy, onAction, onSearchRestaurants, onSearchEntertain
   const replacements = plan.days[activeDay]?.stops.filter(stop => stop.kind !== 'entertainment' && replacementNames[stop.id]?.trim()).map(stop => ({ stopId: stop.id, name: replacementNames[stop.id].trim() })) || [];
   const dayDirty = replacements.length > 0 || JSON.stringify(entertainmentSelection) !== JSON.stringify(entertainment?.selections || []);
   const selectedEntertainment = entertainmentSelection.map(selection => ({ selection, option: entertainment?.options.find(option => option.id === selection.id) })).filter(item => item.option);
+  const draftMeals = plan.food.meals.filter(meal => meal.draftSelectedId);
+  const canFinalizeFood = plan.phase !== 'food_selection' || draftMeals.every(meal => {
+    const selected = meal.options.find(option => option.restaurant.id === meal.draftSelectedId);
+    return !selected?.reasons.length || acceptedFoodWarnings.has(meal.slot.id);
+  });
   const addEntertainment = () => {
     if (!venueChoice) return;
     setEntertainmentSelections(current => {
@@ -222,6 +238,7 @@ function PlanView({ plan, busy, onAction, onSearchRestaurants, onSearchEntertain
   };
   return <section className="result" aria-busy={busy}>
     <div className="section-head"><div><span className="eyebrow">03 / 旅行方案</span><h2>{plan.route.cityOrder.join(' → ')} · {plan.request.days} 天行程</h2><p className="route-origin">从 {plan.request.origin} 出发</p></div><small>更新于 {new Date(plan.sources.updatedAt).toLocaleString('zh-CN')}</small></div>
+    {plan.phase === 'food_selection' && <div className="notice"><b>基础路线已生成。</b> 当前地图只包含到达站、酒店和景点；下方餐厅是草稿，统一确认后才会进入路线。</div>}
     <div className="notice">当前数据状态：AI {sourceName(plan.sources.ai)} · 景点地图 {sourceName(plan.sources.map)} · 天气 {sourceName(plan.sources.weather)} · 酒店 {sourceName(plan.sources.hotel)} · 小红书公开检索 {sourceName(plan.food.searchState)}。演示数据不代表实时地点或价格。</div>
     {!!plan.food.warnings.length && <div className="notice">{plan.food.warnings.map(warning => <p key={warning}>{warning}</p>)}</div>}
     {changeError && <p className="error change-error" role="alert">{changeError}</p>}
@@ -230,20 +247,26 @@ function PlanView({ plan, busy, onAction, onSearchRestaurants, onSearchEntertain
     <div className="layout"><div>{plan.days.map((day, dayIndex) => activeDay === dayIndex && <article className="day" key={day.date}>
       <h3>{day.title}<small>{day.date}</small></h3>
       {day.warning && <p className="notice">{day.warning}</p>}
+      <div className="day-time-window"><b>当天可游玩时间：{day.availableFrom || '待确认'}—{day.mustFinishBy || '待确认'}</b>{day.scheduleIssues?.map(issue => <p key={issue}>{issue}</p>)}</div>
+      {(day.startHub || day.arrivalHotel) && <div className="anchor-sequence" aria-label="抵达后的固定顺序">
+        {day.startHub && <div><time>{day.startHub.time ? new Date(day.startHub.time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai' }) : '待确认'}</time><span><b>{day.startHub.name}</b><small>跨城到达站点</small></span></div>}
+        {day.arrivalHotel && <div><time>{day.arrivalHotelTime || '待确认'}</time><span><b>{day.arrivalHotel.name}</b><small>先办理入住或寄存行李，再前往景点</small></span></div>}
+      </div>}
       {day.stops.map((stop, i) => <Fragment key={`${day.date}-${stop.id}`}>
         <div className="stop"><time>{stop.time}</time><div><strong>{stop.name} {stop.verified && <i>地点已校验</i>}</strong><p className="address">⌖ {stop.address}</p><p>{stop.detail}</p><div className="tags"><span>停留 {stop.duration}</span><span>{stop.indoor ? '室内/可避雨' : '户外活动'}</span>{i > 0 && <span>按少折返顺序规划</span>}</div>
           {stop.kind !== 'entertainment' && <><p className={`reservation ${stop.reservation?.status || 'unknown'}`}>预约提示：{stop.reservation?.message || '预约要求待确认，请在出发前查看景区官方渠道。'} {stop.reservation?.sourceUrl && <a href={stop.reservation.sourceUrl} target="_blank" rel="noreferrer">查看政府来源 →</a>}</p><details className="replace-place"><summary>更换这个景点</summary><label>输入想去的景点<input value={replacementNames[stop.id] || ''} onChange={event => setReplacementNames(current => ({ ...current, [stop.id]: event.target.value }))} maxLength={100} placeholder={`替换“${stop.name}”`} /></label><small>保存时将先通过高德核验，再重新计算当天顺序和餐饮路线。</small></details></>}
           {stop.navigationUrl && <a className="nav-link" href={stop.navigationUrl} target="_blank" rel="noreferrer">在高德地图打开并导航 →</a>}
           {plan.food.tips.filter(tip => tip.placeName === stop.name).map(tip => <SourceTip key={tip.id} tip={tip} food={plan.food} />)}
         </div><b>{stop.costPending ? '费用待确认' : `约 ¥${stop.cost}`}</b></div>
-        {plan.food.meals.filter(meal => meal.slot.dayIndex === dayIndex && meal.slot.previous.id === stop.id).map(meal => <MealCard key={meal.slot.id} meal={meal} food={plan.food} busy={busy} onAction={onAction} onSearch={onSearchRestaurants} />)}
+        {plan.food.meals.filter(meal => meal.slot.dayIndex === dayIndex && meal.slot.previous.id === stop.id).map(meal => <MealCard key={meal.slot.id} meal={meal} food={plan.food} busy={busy} draftMode={plan.phase === 'food_selection'} warningAccepted={acceptedFoodWarnings.has(meal.slot.id)} onWarningAccepted={accepted => setAcceptedFoodWarnings(current => { const next = new Set(current); if (accepted) next.add(meal.slot.id); else next.delete(meal.slot.id); return next; })} onAction={onAction} onSearch={onSearchRestaurants} />)}
       </Fragment>)}
-      <div className="day-editor"><span className="eyebrow">顺路娱乐活动</span><p>先选择想玩的类型，再查找距当天路线 15 公里以内的具体地点。默认安排 1 个，也可继续添加，最多 3 个。</p>
+      {plan.phase === 'food_selection' ? <div className="day-editor pending-editor"><span className="eyebrow">顺路娱乐活动</span><p>请先确认餐厅生成最终路线，再沿完整路线查找娱乐地点。</p></div> : <div className="day-editor"><span className="eyebrow">顺路娱乐活动</span><p>先选择想玩的类型，再查找距当天路线 15 公里以内的具体地点。默认安排 1 个，也可继续添加，最多 3 个。</p>
         <div className="entertainment-search"><label>娱乐项目<select aria-label="娱乐项目" value={entertainmentType} onChange={event => { setEntertainmentTypes(current => ({ ...current, [activeDay]: event.target.value })); setEntertainmentQueries(current => ({ ...current, [activeDay]: '' })); setVenueChoices(current => ({ ...current, [activeDay]: '' })); }}>{ENTERTAINMENT_TYPES.map(item => <option key={item}>{item}</option>)}<option value="其他">其他</option></select></label><label>{entertainmentType === '其他' ? '具体活动类型（必填）' : '希望在哪个区域或哪家店（可选）'}<input aria-label={entertainmentType === '其他' ? '具体活动类型（必填）' : '希望在哪个区域或哪家店（可选）'} value={entertainmentQuery} onChange={event => setEntertainmentQueries(current => ({ ...current, [activeDay]: event.target.value }))} maxLength={100} placeholder={entertainmentType === '其他' ? '如：密室逃脱、Livehouse、电玩城' : '如：西湖附近、某家酒馆'} /></label><button className="secondary" type="button" disabled={busy || (entertainmentType === '其他' && entertainmentQuery.trim().length < 2)} onClick={() => onSearchEntertainment(activeDay, entertainmentType, entertainmentQuery.trim(), entertainmentIds)}>{busy ? '正在查询…' : '按当天路线查找地点'}</button></div>
         {!!entertainmentOptions.length && <div className="entertainment-add"><label>推荐的具体地点<select aria-label="推荐的具体地点" value={venueChoice} onChange={event => setVenueChoices(current => ({ ...current, [activeDay]: event.target.value }))}><option value="">请选择地点</option>{entertainmentOptions.map(option => <option key={option.id} value={option.id}>{option.name} · 从 {entertainment.anchorName} {routeDistance(option.routeMeters)} · 约 {option.routeMinutes ?? '待确认'} 分钟</option>)}</select></label><label>安排时间段<select aria-label="娱乐活动时间段" value={entertainmentPeriod} onChange={event => setEntertainmentPeriods(current => ({ ...current, [activeDay]: event.target.value as EntertainmentPeriod }))}><option value="morning">上午 09:00–12:00</option><option value="afternoon">下午 13:30–18:00</option><option value="evening">晚上 19:00–23:00</option></select></label><button className="secondary" type="button" disabled={!venueChoice || entertainmentSelection.length >= 3} onClick={addEntertainment}>添加到当天草稿</button></div>}
         {!!selectedEntertainment.length && <div className="entertainment-draft"><b>当天娱乐草稿</b>{selectedEntertainment.map(({ option, selection }) => option && <div key={option.id}><span>{option.preference} · {option.name} · {{ morning: '上午', afternoon: '下午', evening: '晚上' }[selection.period]} · {routeDistance(option.routeMeters)} · 约 {option.routeMinutes ?? '待确认'} 分钟</span><label>时间段<select aria-label={`${option.name}时间段`} value={selection.period} onChange={event => setEntertainmentSelections(current => ({ ...current, [activeDay]: entertainmentSelection.map(item => item.id === option.id ? { ...item, period: event.target.value as EntertainmentPeriod } : item) }))}><option value="morning">上午</option><option value="afternoon">下午</option><option value="evening">晚上</option></select></label><button type="button" className="text-button" onClick={() => setEntertainmentSelections(current => ({ ...current, [activeDay]: entertainmentSelection.filter(item => item.id !== option.id) }))}>删除</button></div>)}</div>}
-        {entertainment?.warning && <p>{entertainment.warning}</p>}<button type="button" disabled={busy || !dayDirty} onClick={() => onReplanDay(activeDay, replacements, entertainmentSelection)}>{busy ? '正在核验地点并重新规划…' : '保存修改并重新规划当天路线'}</button><small>景点替换和娱乐更改会在点击此按钮后一次生效；检索本身不会立即改变路线。</small></div>
+        {entertainment?.warning && <p>{entertainment.warning}</p>}<button type="button" disabled={busy || !dayDirty} onClick={() => onReplanDay(activeDay, replacements, entertainmentSelection)}>{busy ? '正在核验地点并重新规划…' : '保存修改并重新规划当天路线'}</button><small>景点替换和娱乐更改会在点击此按钮后一次生效；检索本身不会立即改变路线。</small></div>}
     </article>)}
+      {plan.phase === 'food_selection' && <FoodDraftControls busy={busy} canFinalize={canFinalizeFood} onSearch={onSearchRestaurants} onFinalize={() => onFinalizeFood(acceptedFoodWarnings)} />}
       {!!generalTips.length && <div className="card"><span className="eyebrow">攻略参考 · 尚未匹配具体行程地点</span>{generalTips.map(tip => <SourceTip key={tip.id} tip={tip} food={plan.food} />)}</div>}
       {!!plan.guides?.length && <details className="card"><summary>景点排序参考的公开攻略（{plan.guides.length}）</summary><p>以下是 Tavily 公开搜索相关性顺序，不是小红书站内个性化榜单。</p>{plan.guides.map(source => <p key={source.id}><b>{source.city} · 第 {source.rank} 篇</b> · <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> · {source.contentState === 'full' ? '公开正文' : '搜索摘要'} · 查询 {new Date(source.queriedAt).toLocaleString('zh-CN')}</p>)}</details>}
       {!!plan.food.sources.length && <details className="card"><summary>本次攻略来源（{plan.food.sources.length}）</summary>{plan.food.sources.map(source => <p key={source.id}>{source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> : source.title} · {source.kind === 'search' ? '搜索摘要' : '用户提供'} · 发布 {source.publishedAt || '未知'} · 查询 {new Date(source.queriedAt).toLocaleString('zh-CN')}</p>)}</details>}

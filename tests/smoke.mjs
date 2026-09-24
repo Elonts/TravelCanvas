@@ -56,6 +56,7 @@ for (const mode of ['fixtures', 'offline']) {
     assert.ok(customAttraction.value.candidates.some(candidate => candidate.name === '雷峰塔' && candidate.kind === 'attraction'));
     assert.equal(initial.generated.status, 200, JSON.stringify(initial.generated.value));
     let plan = initial.generated.value;
+    assert.equal(plan.phase, 'food_selection');
     assert.equal(plan.guides.length, 8);
     assert.equal(plan.food.meals.length, 2); assert.ok(plan.planId);
     assert.ok(plan.food.sources.length > 0, 'food evidence is searched only after the attraction route exists');
@@ -70,21 +71,30 @@ for (const mode of ['fixtures', 'offline']) {
     assert.ok(plan.days[0].stops.filter(stop => stop.kind !== 'entertainment').every(stop => stop.reservation?.status === 'unknown'));
     assert.ok(plan.route.paths.length > 0);
     assert.ok(plan.route.paths.every(path => path.state === 'live'));
+    assert.equal(plan.route.points.some(point => point.kind === 'restaurant'), false);
+    assert.ok(plan.food.meals.every(meal => meal.selectedId === null && meal.draftSelectedId));
     const originalStops = structuredClone(plan.days);
-    const mealId = plan.food.meals[0].slot.id;
-    const customFood = await post('/api/plan/restaurants', { planId: plan.planId, revision: plan.revision, mealId, names: ['测试江南餐厅（西湖店）'] });
+    let mealId = plan.food.meals[0].slot.id;
+    const customFood = await post('/api/plan/restaurants', { planId: plan.planId, revision: plan.revision, names: ['测试江南餐厅（西湖店）'] });
     assert.equal(customFood.status, 200, JSON.stringify(customFood.value));
     plan = customFood.value;
     assert.ok(plan.food.meals.find(meal => meal.slot.id === mealId).options.some(option => option.restaurant.name === '测试江南餐厅（西湖店）'));
-    if (plan.food.meals[0].locked) {
-      const unlock = await post('/api/food', { planId: plan.planId, revision: plan.revision, mealId, action: 'lock' });
-      assert.equal(unlock.status, 200); plan = unlock.value;
+    assert.equal(plan.route.points.some(point => point.kind === 'restaurant'), false);
+    const ambiguousFood = await post('/api/plan/restaurants', { planId: plan.planId, revision: plan.revision, names: ['测试'] });
+    assert.equal(ambiguousFood.status, 422); assert.match(ambiguousFood.value.error, /多个分店|完整分店名/);
+    const finalized = await post('/api/plan/finalize-food', { planId: plan.planId, revision: plan.revision, selections: plan.food.meals.map(meal => ({ mealId: meal.slot.id, restaurantId: meal.draftSelectedId, acceptWarnings: true })) });
+    assert.equal(finalized.status, 200, JSON.stringify(finalized.value));
+    plan = finalized.value;
+    assert.equal(plan.phase, 'final');
+    assert.ok(plan.route.points.some(point => point.kind === 'restaurant'));
+    mealId = plan.food.meals.find(meal => meal.selectedId).slot.id;
+    if (plan.food.meals.find(meal => meal.slot.id === mealId).locked) {
+      const unlockedDraft = await post('/api/food', { planId: plan.planId, revision: plan.revision, mealId, action: 'lock' });
+      assert.equal(unlockedDraft.status, 200, JSON.stringify(unlockedDraft.value)); plan = unlockedDraft.value;
     }
-    const previousCost = plan.food.summary.selectedHigh;
     const action = async (name, restaurantId) => post('/api/food', { planId: plan.planId, revision: plan.revision, mealId, action: name, restaurantId });
-    const cheaper = await action('cheaper'); assert.equal(cheaper.status, 200, JSON.stringify(cheaper.value)); plan = cheaper.value;
-    assert.ok(plan.food.summary.selectedHigh <= previousCost); assert.deepEqual(plan.days, originalStops);
     const locked = await action('lock'); assert.equal(locked.status, 200); plan = locked.value;
+    assert.deepEqual(plan.days, originalStops);
     assert.equal((await action('closer')).status, 409);
     const unlocked = await action('lock'); assert.equal(unlocked.status, 200); plan = unlocked.value;
     assert.equal((await action('select', 'forged-id')).status, 409);
@@ -122,6 +132,14 @@ for (const mode of ['fixtures', 'offline']) {
     assert.equal(withHotel.generated.value.days[0].endHotel.name, '测试酒店');
     assert.ok(withHotel.generated.value.route.points.some(point => point.kind === 'hotel'));
     assert.equal(withHotel.generated.value.dayGuides[0].hotels[0].booked, true);
+
+    const arrivalPlan = await generate({ ...fixtureRequest, days: 2, bookedHotels: [{ city: '杭州', name: '测试酒店', addressHint: '', checkIn: '2026-09-10', checkOut: '2026-09-12' }], intercityLegs: [{ fromCity: '上海', toCity: '杭州', mode: 'high_speed_rail', departureHub: { poiId: 'station-shanghai', name: '上海虹桥站', address: '测试车站地址', lng: 121.32, lat: 31.19 }, arrivalHub: { poiId: 'station-hangzhou', name: '杭州东站', address: '测试车站地址', lng: 120.21, lat: 30.29 }, departureAt: '2026-09-10T04:00:00.000Z', arrivalAt: '2026-09-10T07:20:00.000Z', tripNo: 'G1' }] });
+    assert.equal(arrivalPlan.generated.status, 200, JSON.stringify(arrivalPlan.generated.value));
+    assert.equal(arrivalPlan.generated.value.days[0].availableFrom, '16:15');
+    assert.equal(arrivalPlan.generated.value.days[0].route, undefined);
+    assert.deepEqual(arrivalPlan.generated.value.route.points.filter(point => point.date === '2026-09-10').slice(1, 3).map(point => point.kind), ['station', 'hotel']);
+    assert.ok(arrivalPlan.generated.value.days[0].stops.every(stop => stop.time >= '16:15'));
+    assert.ok(arrivalPlan.generated.value.days[0].scheduleIssues.some(issue => issue.includes('15 分钟')));
 
     const multi = await generate({ ...fixtureRequest, days: 3 });
     assert.equal(multi.generated.status, 200, JSON.stringify(multi.generated.value));

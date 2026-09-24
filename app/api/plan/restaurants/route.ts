@@ -14,6 +14,6 @@ export async function POST(request: Request) {
     return NextResponse.json(planStore.replace(parsed.data.planId, parsed.data.revision, updated), { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : '餐厅查询失败。';
-    return NextResponse.json({ error: message }, { status: /过期|版本/.test(message) ? 409 : 503 });
+    return NextResponse.json({ error: message }, { status: /过期|版本/.test(message) ? 409 : /多个分店|完整分店名|没有找到准确餐厅/.test(message) ? 422 : 503 });
   }
 }

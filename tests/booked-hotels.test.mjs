@@ -7,8 +7,8 @@ const days = ['2026-09-10', '2026-09-11', '2026-09-12'].map(date => ({ city: '�
 
 test('hotel anchors follow check-in, middle-night, checkout and same-day switch rules', () => {
   const result = attachHotelAnchors(days, [hotel('酒店甲', '2026-09-10', '2026-09-11'), hotel('酒店乙', '2026-09-11', '2026-09-12')], stops => stops);
-  assert.equal(result[0].startHotel, null); assert.equal(result[0].endHotel.name, '酒店甲');
-  assert.equal(result[1].startHotel.name, '酒店甲'); assert.equal(result[1].endHotel.name, '酒店乙');
+  assert.equal(result[0].startHotel, null); assert.equal(result[0].arrivalHotel.name, '酒店甲'); assert.equal(result[0].endHotel.name, '酒店甲');
+  assert.equal(result[1].startHotel.name, '酒店甲'); assert.equal(result[1].arrivalHotel.name, '酒店乙'); assert.equal(result[1].endHotel.name, '酒店乙');
   assert.equal(result[2].startHotel.name, '酒店乙'); assert.equal(result[2].endHotel, null);
 });
 

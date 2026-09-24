@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { candidateStops, type Day, type Stop } from './fixtures';
 import { recommendHotels } from './hotels.mjs';
 import { requestSchema } from './requests.mjs';
-import { allocateBudget } from './food.mjs';
+import { allocateBudget, asDraftFood } from './food.mjs';
 import { buildFoodPlan, createMapProvider } from './food-providers.mjs';
 import { distributeDays, parseCandidatePlaces, targetStopCount, uniqueStops } from './itinerary.mjs';
 import { orderStops } from './optimizer.mjs';
@@ -15,6 +15,7 @@ import { verifyDayReservations } from './reservations.mjs';
 import { attachHotelAnchors, verifyBookedHotels } from './booked-hotels.mjs';
 import { queryWeather, type WeatherSnapshot } from './weather.mjs';
 import { anchorIntercityDays, buildIntercityTransfers, verifyIntercityLegs } from './intercity.mjs';
+import { scheduleAnchoredDays } from './day-timing.mjs';
 
 export { requestSchema };
 export type TripRequest = z.infer<typeof requestSchema>;
@@ -31,7 +32,7 @@ export type EntertainmentPeriod = 'morning' | 'afternoon' | 'evening';
 export type EntertainmentSelection = { id: string; period: EntertainmentPeriod };
 export type DayEntertainment = { dayIndex: number; anchorName: string; selections: EntertainmentSelection[]; options: EntertainmentOption[]; warning?: string };
 export type BudgetMeta = { transportMode: string; rule: string; knownTransportCost: number; pendingLegs: number };
-export type Plan = { planId?: string; revision?: number; food: FoodPlan; guides: GuideSource[]; request: TripRequest; days: Day[]; route: RouteOverview; budget: Record<string, number>; budgetMeta: BudgetMeta; weather: Weather; hotels: HotelRecommendation[]; dayGuides: DayGuide[]; entertainmentDays: DayEntertainment[]; sources: { ai: DataState; map: DataState; weather: DataState; hotel: DataState; updatedAt: string }; risks: string[] };
+export type Plan = { planId?: string; revision?: number; phase: 'food_selection' | 'final'; food: FoodPlan; guides: GuideSource[]; request: TripRequest; days: Day[]; route: RouteOverview; budget: Record<string, number>; budgetMeta: BudgetMeta; weather: Weather; hotels: HotelRecommendation[]; dayGuides: DayGuide[]; entertainmentDays: DayEntertainment[]; sources: { ai: DataState; map: DataState; weather: DataState; hotel: DataState; updatedAt: string }; risks: string[] };
 
 type MapProvider = ReturnType<typeof createMapProvider>;
 type GeoPoint = { name: string; address: string; lng: number; lat: number; adcode?: string; verified: boolean };
@@ -94,7 +95,7 @@ async function routePaths(points: RoutePoint[], map: MapProvider | null, transpo
   for (let index = 1; index < points.length; index++) {
     const from = points[index - 1], to = points[index];
     if (from.date !== to.date && from.kind !== 'origin') continue;
-    if (from.kind === 'origin' && (to.kind === 'station' || to.kind === 'airport')) continue;
+    if (from.kind === 'origin') continue;
     const leg = await map.route(from, to, transport, from.city, to.city);
     paths.push({ ...leg, fromId: from.id, toId: to.id, date: to.date, transport });
   }
@@ -157,8 +158,9 @@ export async function buildPlan(request: TripRequest, selected: DiscoveryCandida
   }
   days.forEach((day, index) => { day.title = `第 ${index + 1} 天 · ${day.city} · ${day.stops[0]?.name || '待补充地点'}`; });
   const hotelDays = attachHotelAnchors(days, bookedHotels, orderStops);
-  const anchoredDays = anchorIntercityDays(hotelDays, intercityLegs).map((day: Day) => ({ ...day, stops: orderStops(day.stops, day.startHotel || day.startHub || null) }));
-  days.splice(0, days.length, ...anchoredDays);
+  const anchoredDays = anchorIntercityDays(hotelDays, intercityLegs).map((day: Day) => ({ ...day, stops: orderStops(day.stops, day.arrivalHotel || day.startHotel || day.startHub || null) }));
+  const timedDays = await scheduleAnchoredDays(anchoredDays, request, map);
+  days.splice(0, days.length, ...timedDays);
   const reservationDays = await Promise.all(days.map(day => verifyDayReservations(day)));
   days.splice(0, days.length, ...reservationDays);
   const budget = allocateBudget(request);
@@ -168,7 +170,8 @@ export async function buildPlan(request: TripRequest, selected: DiscoveryCandida
   const reusedSources = selectedSources.length ? selectedSources : null;
   const buildSelectedFoodPlan = buildFoodPlan as unknown as (request: TripRequest, days: Day[], budget: Record<string, number>, env: NodeJS.ProcessEnv, fetcher: typeof fetch, options: { mapIntervalMs: number; preferredRestaurants: ReturnType<typeof selectedFood>; discoverySources: ReturnType<typeof discoverySources> | null }) => Promise<FoodPlan>;
   const dailyWeatherPromise = Promise.all(days.map(day => queryWeather(day.city, day.date, orderedCities.destinations.find(item => item.name === day.city)?.location || null)));
-  const [dailyWeather, food] = await Promise.all([dailyWeatherPromise, buildSelectedFoodPlan(request, days, budget, process.env, fetch, { mapIntervalMs: testMapInterval, preferredRestaurants, discoverySources: reusedSources })]);
+  const [dailyWeather, generatedFood] = await Promise.all([dailyWeatherPromise, buildSelectedFoodPlan(request, days, budget, process.env, fetch, { mapIntervalMs: testMapInterval, preferredRestaurants, discoverySources: reusedSources })]);
+  const food = asDraftFood(generatedFood);
   const entertainmentDays: DayEntertainment[] = days.map((day, dayIndex) => ({ dayIndex, anchorName: day.stops.at(-1)?.name || day.startHotel?.name || '', selections: [], options: [], warning: '请先选择娱乐类型和时间段，再按当天路线查找具体地点。' }));
   const orderedStops = days.flatMap(day => day.stops);
   const weatherData = dailyWeather[0] || await queryWeather(primaryCity, request.startDate, orderedCities.destinations[0]?.location || null);
@@ -191,5 +194,5 @@ export async function buildPlan(request: TripRequest, selected: DiscoveryCandida
     const guideHotels = booked ? [{ id: booked.id, title: '已预订酒店', area: booked.name, rationale: '酒店已作为当天路线起点或终点参与道路规划。', filters: '地点已由高德核验', priceGuide: '已预订，费用未计入实时估算', ctripUrl: '', query: booked.name, booked: true, address: booked.address, navigationUrl: booked.navigationUrl }] : recommendHotels({ destination: day.city, days: 1, budget: Object.values(budget).reduce((a, b) => a + b, 0) / request.days, travelers: request.travelers, preferences: request.preferences || '', stops: day.stops });
     return { date: day.date, city: day.city, weather: dailyWeather[index], hotels: guideHotels, reminders: [(dailyWeather[index].rain ?? 0) >= 50 ? '降水概率较高，带伞并优先保留室内备选。' : dailyWeather[index].state === 'pending' ? '该日期暂无可靠天气预报，请临近出发时再次查询。' : '天气适合按计划出行，仍建议准备防晒和饮水。', day.stops.some(stop => !stop.indoor) ? '当天包含户外地点，请穿舒适鞋并留意温差。' : '当天以室内活动为主，留意预约与入场时间。', booked ? '已按预订酒店位置计算当天起终点，实时道路仍以高德为准。' : day.stops.some(stop => stop.kind === 'entertainment') ? '娱乐活动请提前确认营业时间、年龄限制与返程方式。' : '相邻地点已按少折返排序，实时路况仍以高德为准。'] };
   });
-  return { request, days, route, budget, budgetMeta: budgetMeta(request, route), food, guides, weather: weatherData, hotels, dayGuides, entertainmentDays, sources: { ai: stateOf(aiStates), map: stateOf(mapStates), weather: stateOf(dailyWeather.map(item => item.state)), hotel: bookedHotels.length ? 'live' : 'demo', updatedAt: new Date().toISOString() }, risks: ['多城市顺序采用就近启发式减少明显折返，不等于承诺全程最短；跨城交通方式和班次仍需确认。', '门票、营业时间与预约规则可能变动，请在出发前确认。', bookedHotels.length ? '已预订酒店地点经高德核验并参与路线，订单、入住政策和费用仍以预订平台为准。' : '酒店推荐按路线与预算计算，不包含实时房态或价格；请以携程页面为准。', '餐饮价格为高德人均参考上下浮动 20% 的估算；餐厅营业和帖子经验仍需出发前确认。', '餐饮路线为当前查询估算；驾车新增费用按每车 15 元起计加每公里 3 元及路段收费估算，4 人一车。', (weatherData.rain ?? 0) >= 50 ? '首站降雨概率较高，建议保留一部分未安排预算应对价格变化。' : '预算中的“剩余可用”不是费用，只有实际下单或购票后才算支出。'] };
+  return { phase: 'food_selection', request, days, route, budget, budgetMeta: budgetMeta(request, route), food, guides, weather: weatherData, hotels, dayGuides, entertainmentDays, sources: { ai: stateOf(aiStates), map: stateOf(mapStates), weather: stateOf(dailyWeather.map(item => item.state)), hotel: bookedHotels.length ? 'live' : 'demo', updatedAt: new Date().toISOString() }, risks: ['多城市顺序采用就近启发式减少明显折返，不等于承诺全程最短；跨城交通方式和班次仍需确认。', '门票、营业时间与预约规则可能变动，请在出发前确认。', bookedHotels.length ? '已预订酒店地点经高德核验并参与路线，订单、入住政策和费用仍以预订平台为准。' : '酒店推荐按路线与预算计算，不包含实时房态或价格；请以携程页面为准。', '餐厅当前只是选择草稿，只有确认后才会进入最终路线。', '餐饮路线为当前查询估算；驾车新增费用按每车 15 元起计加每公里 3 元及路段收费估算，4 人一车。', (weatherData.rain ?? 0) >= 50 ? '首站降雨概率较高，建议保留一部分未安排预算应对价格变化。' : '预算中的“剩余可用”不是费用，只有实际下单或购票后才算支出。'] };
 }

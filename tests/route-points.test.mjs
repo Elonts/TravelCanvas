@@ -30,5 +30,14 @@ test('booked hotels appear as the verified start and end points of each day', ()
   const anchored = [{ ...days[0], startHotel: hotel, endHotel: hotel }];
   const points = createRoutePoints(null, request, anchored, { meals: [] });
   assert.deepEqual(points.map(point => point.kind), ['hotel', 'attraction', 'attraction', 'hotel']);
-  assert.deepEqual(points.filter(point => point.kind === 'hotel').map(point => point.time), ['08:30', '22:30']);
+  assert.deepEqual(points.filter(point => point.kind === 'hotel').map(point => point.time), ['08:30', '返程']);
+});
+
+test('arrival day map order is station, arrival hotel, attractions and return hotel', () => {
+  const hotel = { poiId: 'hotel-1', name: '测试酒店', address: '酒店地址', lng: 120.12, lat: 30.22, verified: true };
+  const hub = { poiId: 'station-1', name: '杭州东站', address: '车站地址', lng: 120.21, lat: 30.29, verified: true, kind: 'station', time: '2026-09-10T15:20:00+08:00' };
+  const anchored = [{ ...days[0], startHub: hub, arrivalHotel: hotel, arrivalHotelTime: '15:55', endHotel: hotel, endHotelTime: '20:30' }];
+  const points = createRoutePoints(null, request, anchored, { meals: [] });
+  assert.deepEqual(points.map(point => point.kind), ['station', 'hotel', 'attraction', 'attraction', 'hotel']);
+  assert.deepEqual(points.slice(0, 2).map(point => point.name), ['杭州东站', '测试酒店']);
 });

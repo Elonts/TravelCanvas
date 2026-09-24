@@ -38,7 +38,7 @@ export type MealOption = {
   score: number; explanation: string;
 };
 export type Meal = {
-  slot: MealSlot; options: MealOption[]; selectedId: string | null; locked: boolean;
+  slot: MealSlot; options: MealOption[]; selectedId: string | null; draftSelectedId?: string | null; locked: boolean;
 };
 export type FoodPlan = {
   meals: Meal[]; sources: EvidenceSource[]; tips: EvidenceTip[]; warnings: string[];

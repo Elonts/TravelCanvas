@@ -10,6 +10,7 @@ import { verifyDayReservations } from './reservations.mjs';
 import { amapImageAttribution, fillMissingWebImages } from './web-images.mjs';
 import { ENTERTAINMENT_RADIUS_METERS, ENTERTAINMENT_TYPES } from './entertainment';
 import { scheduleDay } from './day-schedule.mjs';
+import { asDraftFood, summarizeFood } from './food.mjs';
 
 const normalize = (value: string) => value.replace(/[\s（）()·]/g, '').toLowerCase();
 const rebuildFoodPlan = buildFoodPlan as unknown as (request: Plan['request'], days: Plan['days'], budget: Plan['budget'], env: NodeJS.ProcessEnv, fetcher: typeof fetch, options: { mapIntervalMs: number; preferredRestaurants: Restaurant[]; discoverySources: FoodPlan['sources'] | null }) => Promise<FoodPlan>;
@@ -23,36 +24,87 @@ function asAttraction(candidate: any, old: Stop, queriedAt: string): Stop {
   };
 }
 
-async function routePaths(plan: Plan, points: Plan['route']['points'], map: ReturnType<typeof createMapProvider>): Promise<RoutePath[]> {
+export async function routePaths(plan: Plan, points: Plan['route']['points'], map: ReturnType<typeof createMapProvider>): Promise<RoutePath[]> {
   const paths: RoutePath[] = [];
   for (let index = 1; index < points.length; index++) {
     const from = points[index - 1], to = points[index];
     if (from.date !== to.date && from.kind !== 'origin') continue;
-    if (from.kind === 'origin' && (to.kind === 'station' || to.kind === 'airport')) continue;
+    if (from.kind === 'origin') continue;
     const leg = await map.route(from, to, plan.request.transport, from.city, to.city);
     paths.push({ ...leg, fromId: from.id, toId: to.id, date: to.date, transport: plan.request.transport });
   }
   return paths;
 }
 
-export async function addRestaurantCandidates(plan: Plan, input: { mealId: string; names: string[] }): Promise<Plan> {
-  const meal = plan.food.meals.find(item => item.slot.id === input.mealId);
-  if (!meal) throw Error('要补充的餐次不存在');
+export async function addRestaurantCandidates(plan: Plan, input: { mealId?: string; names: string[] }): Promise<Plan> {
+  const meal = input.mealId ? plan.food.meals.find(item => item.slot.id === input.mealId) : null;
+  if (input.mealId && !meal) throw Error('要补充的餐次不存在');
   if (!process.env.AMAP_API_KEY) throw Error('高德服务未配置，无法核验餐厅分店');
   const map = createMapProvider(process.env, fetch, { intervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400 });
-  const places = await map.discover(meal.slot.city, 'food', input.names, Math.min(16, input.names.length * 3), plan.request.transport);
-  const matches = input.names.map(name => places.find((place: any) => normalize(place.name) === normalize(name))
-    || places.find((place: any) => normalize(place.name).includes(normalize(name)) || normalize(name).includes(normalize(place.name))))
-    .filter((place: any, index: number, all: any[]) => place && all.findIndex(other => other?.poiId === place.poiId) === index);
+  const cities = meal ? [meal.slot.city] : [...new Set(plan.food.meals.map(item => item.slot.city))];
+  const candidatesByName = new Map(input.names.map(name => [name, [] as any[]]));
+  for (const city of cities) {
+    const places = await map.discover(city, 'food', input.names, Math.min(20, input.names.length * 4), plan.request.transport);
+    for (const name of input.names) {
+      const exact = places.filter((place: any) => normalize(place.name) === normalize(name));
+      const possible = exact.length ? exact : places.filter((place: any) => normalize(place.name).includes(normalize(name)) || normalize(name).includes(normalize(place.name)));
+      for (const place of possible) if (!candidatesByName.get(name)?.some(candidate => candidate.poiId === place.poiId)) candidatesByName.get(name)?.push({ ...place, city });
+    }
+  }
+  const matches: any[] = [];
+  for (const [name, candidates] of candidatesByName) {
+    if (candidates.length > 1) throw Error(`“${name}”匹配到多个分店：${candidates.slice(0, 3).map(candidate => `${candidate.name}（${candidate.address}）`).join('、')}。请填写完整分店名后重试`);
+    if (candidates[0]) matches.push(candidates[0]);
+  }
   if (!matches.length) throw Error('没有找到准确餐厅，请补充完整店名或分店名');
   const existing = plan.food.meals.flatMap(item => item.options.map(option => option.restaurant));
-  const preferredRestaurants: Restaurant[] = [...existing, ...matches.map((place: any) => ({ id: place.poiId, city: meal.slot.city, preferred: true, preferredMealId: meal.slot.id, name: place.name, address: place.address, lng: place.lng, lat: place.lat, category: place.category, price: place.price || null, hours: place.hours || '', source: '用户输入 + 高德地图 POI', queriedAt: new Date().toISOString(), imageUrl: place.imageUrl || null, navigationUrl: place.navigationUrl || null, tips: [] }))];
-  const food = await rebuildFoodPlan(plan.request, plan.days, plan.budget, process.env, fetch, { mapIntervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400, preferredRestaurants, discoverySources: null });
+  const preferredRestaurants: Restaurant[] = [...existing, ...matches.map((place: any) => ({ id: place.poiId, city: place.city, preferred: true, ...(meal ? { preferredMealId: meal.slot.id } : {}), name: place.name, address: place.address, lng: place.lng, lat: place.lat, category: place.category, price: place.price || null, hours: place.hours || '', source: '用户输入 + 高德地图 POI', queriedAt: new Date().toISOString(), imageUrl: place.imageUrl || null, navigationUrl: place.navigationUrl || null, tips: [] }))];
+  const generated = await rebuildFoodPlan(plan.request, plan.days, plan.budget, process.env, fetch, { mapIntervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400, preferredRestaurants, discoverySources: null });
+  if (!meal) {
+    const claimedMeals = new Set<string>();
+    for (const place of matches) {
+      generated.meals.forEach(candidateMeal => { if (candidateMeal.selectedId === place.poiId) { candidateMeal.selectedId = null; candidateMeal.locked = false; } });
+      const choices = generated.meals.flatMap(candidateMeal => candidateMeal.options
+        .filter(option => option.restaurant.id === place.poiId && !option.hardBlocked)
+        .map(option => ({ meal: candidateMeal, option })))
+        .sort((a, b) => Number(a.option.reasons.length > 0) - Number(b.option.reasons.length > 0)
+          || (a.option.extraMinutes ?? Number.MAX_SAFE_INTEGER) - (b.option.extraMinutes ?? Number.MAX_SAFE_INTEGER));
+      const best = choices.find(choice => !claimedMeals.has(choice.meal.slot.id));
+      if (best) { best.meal.selectedId = place.poiId; best.meal.locked = true; claimedMeals.add(best.meal.slot.id); }
+    }
+    generated.summary = summarizeFood(generated);
+  }
+  const food = plan.phase === 'food_selection' ? asDraftFood(generated) : generated;
+  if (plan.phase === 'food_selection') return { ...plan, food, sources: { ...plan.sources, updatedAt: new Date().toISOString() } };
   const origin = plan.route.points.find(point => point.kind === 'origin') || null;
   const points = createRoutePoints(origin, plan.request, plan.days, food);
   const paths = await routePaths(plan, points, map);
   const route = { ...plan.route, points, paths, state: paths.length && paths.every(path => path.state === 'live') ? 'live' as const : 'pending' as const, queriedAt: new Date().toISOString() };
   return { ...plan, food, route, budgetMeta: budgetMeta(plan.request, route), sources: { ...plan.sources, map: route.state, updatedAt: new Date().toISOString() } };
+}
+
+export async function finalizeFoodPlan(plan: Plan, selections: { mealId: string; restaurantId: string | null; acceptWarnings: boolean }[]): Promise<Plan> {
+  if (plan.phase !== 'food_selection') throw Error('餐厅已经确认，无需重复生成最终路线');
+  if (!process.env.AMAP_API_KEY) throw Error('高德服务未配置，无法生成含餐厅的最终路线');
+  const selectedByMeal = new Map(selections.map(item => [item.mealId, item]));
+  const food = structuredClone(plan.food);
+  for (const meal of food.meals) {
+    const selection = selectedByMeal.get(meal.slot.id);
+    const restaurantId = selection ? selection.restaurantId : meal.draftSelectedId || null;
+    if (!restaurantId) { meal.selectedId = null; meal.draftSelectedId = null; continue; }
+    const option = meal.options.find(item => item.restaurant.id === restaurantId);
+    if (!option) throw Error(`${meal.slot.label}的餐厅候选已失效，请重新选择`);
+    if (option.hardBlocked) throw Error(`${option.restaurant.name}存在明确饮食禁忌冲突，不能加入路线`);
+    if (option.reasons.length && !selection?.acceptWarnings) throw Error(`${option.restaurant.name}存在“${option.reasons.join('、')}”，请先确认风险后再生成路线`);
+    meal.selectedId = restaurantId; meal.draftSelectedId = restaurantId; meal.locked = Boolean(option.reasons.length || option.pending.length);
+  }
+  food.summary = summarizeFood(food);
+  const map = createMapProvider(process.env, fetch, { intervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400 });
+  const origin = plan.route.points.find(point => point.kind === 'origin') || null;
+  const points = createRoutePoints(origin, plan.request, plan.days, food);
+  const paths = await routePaths(plan, points, map);
+  const route = { ...plan.route, points, paths, state: paths.length && paths.every(path => path.state === 'live') ? 'live' as const : 'pending' as const, queriedAt: new Date().toISOString(), note: '已按用户确认的餐厅重新计算最终路线；实时道路与营业情况仍以出发前查询为准。' };
+  return { ...plan, phase: 'final', food, route, budgetMeta: budgetMeta(plan.request, route), sources: { ...plan.sources, map: route.state, updatedAt: new Date().toISOString() } };
 }
 
 export async function replanDay(plan: Plan, change: { dayIndex: number; replacements: { stopId: string; name: string }[]; removedStopIds: string[]; entertainmentSelections: EntertainmentSelection[] }): Promise<Plan> {

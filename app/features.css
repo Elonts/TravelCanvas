@@ -162,6 +162,25 @@
 .custom-restaurant-search > div { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
 .custom-restaurant-search small { color: var(--muted); line-height: 1.5; }
 .custom-restaurant-search button { flex: 0 0 auto; width: auto; }
+.food-draft-controls { display: grid; gap: 14px; margin-top: 16px; padding: 18px; background: #fffdf8; border: 1px solid var(--line); border-radius: 11px; }
+.food-draft-controls .custom-restaurant-search { margin-top: 0; }
+.finalize-food { display: flex; gap: 18px; align-items: center; justify-content: space-between; padding: 15px; color: #f8f4e9; background: var(--green); border-radius: 9px; }
+.finalize-food p { margin: 4px 0 0; color: #d8e7df; font-size: 12px; }
+.finalize-food button { flex: 0 0 auto; width: auto; color: var(--green); background: #fffdf8; }
+.risk-confirm { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; padding: 10px; color: #804031; font-size: 12px; line-height: 1.5; background: #fff2eb; border-radius: 7px; }
+.risk-confirm input { flex: 0 0 auto; width: auto; margin-top: 2px; }
+.detour-choices { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }
+.detour-choices > b { flex: 1 0 100%; color: #804031; font-size: 12px; }
+.detour-choices > button { width: auto; }
+.detour-choices .risk-confirm { flex: 1 0 100%; margin-top: 0; }
+.day-time-window { margin: 0 0 13px; padding: 11px 13px; color: var(--green); background: #eaf0e7; border-radius: 8px; }
+.day-time-window p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.anchor-sequence { display: grid; gap: 6px; margin-bottom: 13px; }
+.anchor-sequence > div { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; padding: 11px 13px; background: #f2f4ef; border-left: 3px solid var(--green); border-radius: 6px; }
+.anchor-sequence time { color: var(--orange); font-size: 12px; font-weight: 800; }
+.anchor-sequence span { display: grid; gap: 3px; }
+.anchor-sequence small { color: var(--muted); }
+.pending-editor { border-style: dashed; }
 .preference-checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .preference-checks label { display: flex; width: auto; gap: 6px; align-items: center; font-size: 13px; }
 .preference-checks input { width: auto; }
@@ -177,6 +196,8 @@
   .amap-container { height: 440px; }
   .day-guide { grid-template-columns: 1fr; }
   .entertainment-search, .entertainment-add { grid-template-columns: 1fr; }
+  .finalize-food { align-items: stretch; flex-direction: column; }
+  .finalize-food button { width: 100%; }
   .candidate-grid { grid-template-columns: 1fr; }
   .guide-search-status { align-items: stretch; flex-direction: column; }
 }
