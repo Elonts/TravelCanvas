@@ -49,7 +49,11 @@ export default function Home() {
       if (event.source !== window || event.origin !== window.location.origin || event.data?.source !== 'travelcanvas-extension') return;
       if (event.data.type === 'TRAVELCANVAS_XHS_STATUS_RESULT') { setXhsConnected(Boolean(event.data.connected)); return; }
       if (event.data.type !== 'TRAVELCANVAS_XHS_RESULT') return;
-      if (!event.data.ok) { setXhsError(labels[event.data.code] || '登录态搜索失败。'); setXhsBusyCity(''); return; }
+      if (!event.data.ok) {
+        const message = labels[event.data.code] || '登录态搜索失败。'; setXhsError(message); setXhsBusyCity('');
+        setDiscovery(current => current ? { ...current, xhsSession: { ...current.xhsSession, state: 'failed', code: event.data.code || 'extension_error', message, queriedAt: new Date().toISOString() } } : current);
+        return;
+      }
       try {
         for (const batch of event.data.batches || []) {
           const response = await fetch('/api/discover/xhs-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discoveryId: event.data.discoveryId, city: event.data.city, ...batch }) });

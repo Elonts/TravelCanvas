@@ -1,10 +1,12 @@
 export type EvidenceSource = {
   id: string; title: string; url: string | null; content: string;
   kind: 'search' | 'pasted'; publishedAt: string | null; queriedAt: string;
+  sourceKind?: 'tavily_public' | 'xhs_session'; query?: string;
 };
 export type EvidenceTip = {
   id: string; sourceId: string; placeName: string; text: string; quote: string;
   category: 'food' | 'travel' | 'ranking'; state: 'pending';
+  sourceKind?: 'tavily_public' | 'xhs_session'; searchRank?: number; visibleLikes?: number | null;
   dishes?: string[];
 };
 export type Restaurant = {

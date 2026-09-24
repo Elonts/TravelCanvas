@@ -3,14 +3,15 @@ let running = false;
 
 chrome.tabs.onRemoved.addListener(tabId => { if (tabId === connectedTabId) connectedTabId = null; });
 
-const waitForComplete = tabId => new Promise((resolve, reject) => {
-  const timer = setTimeout(() => { chrome.tabs.onUpdated.removeListener(listener); reject(new Error('timeout')); }, 20000);
-  const listener = (id, info) => {
-    if (id !== tabId || info.status !== 'complete') return;
-    clearTimeout(timer); chrome.tabs.onUpdated.removeListener(listener); resolve();
-  };
-  chrome.tabs.onUpdated.addListener(listener);
-});
+const waitForComplete = async tabId => {
+  const started = Date.now();
+  while (Date.now() - started < 20000) {
+    const tab = await chrome.tabs.get(tabId);
+    if (tab.status === 'complete') return;
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  throw new Error('timeout');
+};
 
 async function xhsTab(url) {
   const existing = (await chrome.tabs.query({ url: 'https://www.xiaohongshu.com/*' }))[0];

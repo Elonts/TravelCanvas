@@ -8,3 +8,7 @@ window.addEventListener('message', event => {
     window.postMessage({ source: 'travelcanvas-extension', type: 'TRAVELCANVAS_XHS_RESULT', ok: false, code: 'extension_error' }, event.origin);
   });
 });
+chrome.runtime.onMessage.addListener(message => {
+  if (message?.type !== 'TRAVELCANVAS_CONNECTION_CHANGED') return;
+  window.postMessage({ source: 'travelcanvas-extension', type: 'TRAVELCANVAS_XHS_STATUS_RESULT', ok: true, connected: true }, window.location.origin);
+});

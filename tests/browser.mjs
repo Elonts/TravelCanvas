@@ -80,7 +80,8 @@ try {
         for (let index = 0; index < addCount; index++) await unselectedAttractions.nth(0).click();
         assert.ok(await page.locator('.candidate-image img').count() >= 3);
         await page.waitForFunction(() => [...document.querySelectorAll('.candidate-image img')].slice(0, 3).every(image => image.complete && image.naturalWidth > 0));
-        assert.equal(await page.getByText(/小红书公开笔记证据/).count(), 0);
+        assert.equal(await page.getByText(/本地小红书扩展未连接/).count(), 1);
+        assert.equal(await page.getByRole('button', { name: '用已登录小红书补充' }).isDisabled(), true);
         assert.equal(await page.getByText(/公开攻略综合推荐来源/).count(), 1);
         assert.ok(await page.getByText(/旅游攻略原文证据/).count() > 0);
         await page.getByRole('button', { name: /生成基础路线并顺路找美食/ }).click();
@@ -115,8 +116,15 @@ try {
         assert.ok((await page.locator('.notice').filter({ hasText: '基础路线已生成' }).innerText()).includes('餐厅是草稿'));
         assert.equal(await page.locator('.map-point-list button').filter({ hasText: '测试江南餐厅' }).count(), 0);
         const bulkRestaurantInput = page.getByLabel('还想吃其他餐厅？可一次输入多家');
-        await bulkRestaurantInput.fill('测试江南餐厅（西湖店）、测试面馆（西湖店）');
+        await bulkRestaurantInput.fill('测试');
         await Promise.all([page.waitForResponse(response => response.url().includes('/api/plan/restaurants') && response.request().method() === 'POST'), page.getByRole('button', { name: /核验并加入草稿/ }).click()]);
+        const finalizeButton = page.getByRole('button', { name: /确认餐厅并生成最终路线/ });
+        assert.equal(await finalizeButton.isDisabled(), false);
+        await finalizeButton.click();
+        await page.getByRole('alert').filter({ hasText: /需要处理/ }).waitFor();
+        const recommendedBranch = page.locator('.branch-candidate.recommended');
+        assert.ok(await recommendedBranch.getByText(/道路约|道路距离待确认/).count() > 0);
+        await Promise.all([page.waitForResponse(response => response.url().includes('/api/plan/restaurants') && response.request().method() === 'POST'), recommendedBranch.getByRole('button', { name: /选择这个分店|替换当前餐厅/ }).click()]);
         const riskChecks = page.locator('.risk-confirm input');
         for (let index = 0; index < await riskChecks.count(); index++) if (!await riskChecks.nth(index).isChecked()) await riskChecks.nth(index).check();
         await Promise.all([page.waitForResponse(response => response.url().includes('/api/plan/finalize-food') && response.request().method() === 'POST'), page.getByRole('button', { name: /确认餐厅并生成最终路线/ }).click()]);

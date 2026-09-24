@@ -105,16 +105,16 @@ function selectedFood(candidates: DiscoveryCandidate[], preferred = true) {
   return candidates.filter(candidate => candidate.kind === 'food').map(candidate => ({
     id: candidate.poiId, city: candidate.city, preferred, name: candidate.name, address: candidate.address, lng: candidate.lng, lat: candidate.lat,
     category: candidate.category, price: candidate.price, hours: candidate.hours, source: candidate.source, queriedAt: candidate.queriedAt,
-    imageUrl: candidate.imageUrl, imageAttribution: candidate.imageAttribution, navigationUrl: candidate.navigationUrl, tips: candidate.evidence.map((evidence, index) => ({ id: `discovery-tip-${index}`, sourceId: evidence.sourceId, placeName: candidate.name, text: evidence.quote, quote: evidence.quote, dishes: evidence.dishes, category: 'food' as const, state: 'pending' as const })),
+    imageUrl: candidate.imageUrl, imageAttribution: candidate.imageAttribution, navigationUrl: candidate.navigationUrl, tips: candidate.evidence.map((evidence, index) => ({ id: `discovery-tip-${index}`, sourceId: evidence.sourceId, placeName: candidate.name, text: evidence.quote, quote: evidence.quote, dishes: evidence.dishes, category: 'food' as const, state: 'pending' as const, sourceKind: evidence.sourceKind, searchRank: evidence.searchRank, visibleLikes: evidence.visibleLikes })),
     featuredDishes: candidate.featuredDishes || [],
   }));
 }
 
 function discoverySources(candidates: DiscoveryCandidate[]) {
-  const sources = new Map<string, { id: string; title: string; url: string | null; content: string; kind: 'search'; publishedAt: string | null; queriedAt: string }>();
+  const sources = new Map<string, { id: string; title: string; url: string | null; content: string; kind: 'search'; publishedAt: string | null; queriedAt: string; sourceKind?: 'tavily_public' | 'xhs_session'; query?: string }>();
   candidates.flatMap(candidate => candidate.evidence).forEach(evidence => {
     const previous = sources.get(evidence.sourceId);
-    sources.set(evidence.sourceId, { id: evidence.sourceId, title: evidence.title, url: evidence.url, content: [previous?.content, evidence.quote].filter(Boolean).join('。'), kind: 'search', publishedAt: evidence.publishedAt, queriedAt: evidence.queriedAt });
+    sources.set(evidence.sourceId, { id: evidence.sourceId, title: evidence.title, url: evidence.url, content: [previous?.content, evidence.quote].filter(Boolean).join('。'), kind: 'search', publishedAt: evidence.publishedAt, queriedAt: evidence.queriedAt, sourceKind: evidence.sourceKind || 'tavily_public', query: evidence.query });
   });
   return [...sources.values()];
 }

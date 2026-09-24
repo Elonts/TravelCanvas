@@ -63,6 +63,11 @@ test('unknown data is explicitly acceptable while hard conflicts remain blocked'
   const allergy = evaluate({ ...restaurant, name: '牛肉面馆' }, slot, { ...request, dietary: '不吃牛肉' });
   assert.equal(allergy.canAcceptPending, false); assert.equal(allergy.hardBlocked, true);
 });
+test('login-session heat cannot override a dietary hard conflict', () => {
+  const popularConflict = evaluate({ ...restaurant, name: '牛肉面馆', tips: [{ id: 'x', sourceId: 'x', placeName: '牛肉面馆', text: '牛肉面馆', quote: '牛肉面馆', category: 'ranking', state: 'pending', sourceKind: 'xhs_session', searchRank: 1, visibleLikes: 999999 }] }, slot, { ...request, dietary: '不吃牛肉' });
+  assert.equal(popularConflict.hardBlocked, true);
+  assert.equal(popularConflict.canAcceptPending, false);
+});
 test('unknown prices are reported as pending instead of zero', () => {
   const unknown = evaluate({ ...restaurant, price: null });
   const pendingFood = { ...food, meals: [{ ...food.meals[0], options: [unknown], selectedId: unknown.restaurant.id }] };

@@ -20,7 +20,7 @@ export function SourceTip({ tip, food }: { tip: EvidenceTip; food: FoodPlan }) {
   return <div className="evidence-tip">
     <p><b>{tip.category === 'ranking' ? '榜单线索 · 待确认' : '帖子经验 · 待确认'}</b>：{tip.text}</p>
     <small>{source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a> : source.title}
-      {' · '}{source.kind === 'search' ? '搜索摘要，非全文' : '用户提供，未核验原文'}<br />
+      {' · '}{source.sourceKind === 'xhs_session' ? '登录态搜索结果卡可见文本' : source.kind === 'search' ? 'Tavily 搜索摘要，非全文' : '用户提供，未核验原文'}<br />
       发布：{source.publishedAt || '未知'} · 查询：{stamp(source.queriedAt)}</small>
   </div>;
 }
