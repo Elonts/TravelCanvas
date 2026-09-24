@@ -10,7 +10,9 @@ for (const mode of ['fixtures', 'offline']) {
   };
   const discover = request => post('/api/discover', request);
   const generate = async request => {
-    const found = await discover(request);
+    const base = await discover(request);
+    assert.equal(base.status, 200, JSON.stringify(base.value));
+    const found = await post('/api/discover/guides', { discoveryId: base.value.discoveryId });
     assert.equal(found.status, 200, JSON.stringify(found.value));
     if (!found.value.candidates.length) return { found, generated: null };
     const generated = await post('/api/plan', { discoveryId: found.value.discoveryId, selectedIds: found.value.candidates.map(candidate => candidate.id) });
@@ -34,6 +36,7 @@ for (const mode of ['fixtures', 'offline']) {
     assert.equal(initial.found.value.guideSources.length, 8);
     assert.ok(initial.found.value.guideSources.every((source, index) => source.rank === index + 1 && source.contentState === 'summary' && !('content' in source)));
     assert.equal(initial.found.value.sources.guides, 'live');
+    assert.ok(['live', 'partial'].includes(initial.found.value.guideSearch.state));
     assert.ok(initial.found.value.candidates.some(candidate => candidate.kind === 'attraction' && candidate.guideEvidence.length && candidate.guideScore > 0));
     const guideRankedAttractions = initial.found.value.candidates.filter(candidate => candidate.kind === 'attraction');
     assert.equal(guideRankedAttractions[0].name, '西湖风景名胜区');

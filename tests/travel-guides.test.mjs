@@ -5,7 +5,7 @@ import { enrichGuideBodies, extractGuideInsights, isGuideRelevant, searchTravelG
 const env = { TAVILY_API_KEY: 'test', DEEPSEEK_API_KEY: 'test' };
 const response = value => new Response(JSON.stringify(value), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
-test('guide search uses one destination query and keeps at most eight unique public notes in relevance order', async () => {
+test('guide search starts with a lower-latency destination query and keeps at most eight unique public notes', async () => {
   let body;
   const result = await searchTravelGuides('杭州', env, async (_url, options) => {
     body = JSON.parse(options.body);
@@ -17,7 +17,8 @@ test('guide search uses one destination query and keeps at most eight unique pub
   });
   assert.match(body.query, /杭州.*旅游攻略.*必去.*避雷/);
   assert.deepEqual(body.include_domains, ['xiaohongshu.com']);
-  assert.equal(body.max_results, 8);
+  assert.equal(body.search_depth, 'basic');
+  assert.equal(body.max_results, 12);
   assert.equal(result.sources.length, 8);
   assert.equal(result.sources[0].title, '重复');
   assert.deepEqual(result.sources.map(item => item.rank), [1, 2, 3, 4, 5, 6, 7, 8]);
@@ -57,6 +58,31 @@ test('guide insights require a literal place name and continuous quote from the 
 });
 
 test('missing Tavily and failed search degrade without blocking discovery', async () => {
-  assert.equal((await searchTravelGuides('杭州', {}, () => assert.fail())).state, 'pending');
-  assert.equal((await searchTravelGuides('杭州', env, async () => { throw Error('timeout'); })).sources.length, 0);
+  const missing = await searchTravelGuides('杭州', {}, () => assert.fail());
+  assert.equal(missing.code, 'not_configured');
+  const failed = await searchTravelGuides('杭州', env, async () => { throw Object.assign(Error('timeout'), { name: 'TimeoutError' }); });
+  assert.equal(failed.sources.length, 0);
+  assert.equal(failed.code, 'timeout');
+  assert.equal(failed.retryable, true);
+});
+
+test('guide search distinguishes credentials, rate limits and quota failures', async () => {
+  const unauthorized = await searchTravelGuides('北京', env, async () => new Response('{}', { status: 401 }));
+  assert.equal(unauthorized.code, 'unauthorized'); assert.equal(unauthorized.retryable, false);
+  let rateCalls = 0;
+  const rateLimited = await searchTravelGuides('成都', env, async () => { rateCalls++; return new Response('{}', { status: 429 }); });
+  assert.equal(rateLimited.code, 'rate_limited'); assert.equal(rateCalls, 2);
+  const quota = await searchTravelGuides('西安', env, async () => new Response('{}', { status: 432 }));
+  assert.equal(quota.code, 'quota_exceeded'); assert.equal(quota.retryable, false);
+});
+
+test('sparse basic results trigger one preference-aware advanced query', async () => {
+  const bodies = [];
+  const result = await searchTravelGuides('苏州', '园林', '少走路', env, async (_url, options) => {
+    const body = JSON.parse(options.body); bodies.push(body);
+    return response({ results: [{ title: '苏州园林攻略', url: `https://www.xiaohongshu.com/explore/${body.search_depth}123`, content: '苏州园林慢游路线', score: .8 }] });
+  });
+  assert.deepEqual(bodies.map(body => body.search_depth), ['basic', 'advanced']);
+  assert.match(bodies[1].query, /园林.*少走路/);
+  assert.equal(result.sources.length, 2);
 });

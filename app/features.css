@@ -97,6 +97,11 @@
 .intercity-times label:last-child { grid-column: 1 / -1; }
 .candidate-warnings { margin: 12px 0 0; }
 .candidate-warnings p { color: var(--muted); font-size: 12px; }
+.guide-search-status { display: flex; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 13px 14px; color: var(--green-deep); background: var(--green-soft); border-radius: 9px; }
+.guide-search-status p { margin: 3px 0; font-size: 12px; line-height: 1.55; }
+.guide-search-status small { color: var(--muted); }
+.guide-search-status.partial, .guide-search-status.failed { color: #783d30; background: var(--orange-soft); }
+.guide-search-status button { flex: 0 0 auto; width: auto; }
 .candidate-city { padding: 22px 0; border-bottom: 1px solid var(--line); }
 .candidate-city > h3 { margin: 0 0 16px; font-size: 24px; }
 .candidate-category { margin-top: 20px; }
@@ -173,6 +178,7 @@
   .day-guide { grid-template-columns: 1fr; }
   .entertainment-search, .entertainment-add { grid-template-columns: 1fr; }
   .candidate-grid { grid-template-columns: 1fr; }
+  .guide-search-status { align-items: stretch; flex-direction: column; }
 }
 
 @media (max-width: 520px) {

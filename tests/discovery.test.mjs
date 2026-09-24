@@ -27,6 +27,15 @@ test('discovery store appends verified custom candidates without duplicating ser
   assert.deepEqual(updated.warnings, ['自定义地点提示']);
 });
 
+test('discovery store replaces progressive guide enrichment without changing its id or expiry', () => {
+  const store = new DiscoveryStore({ clock: () => 1000 });
+  const saved = store.save({ request: { destinations: ['杭州'] }, candidates: [candidate('hz', '杭州')], warnings: [], sources: {} });
+  const replaced = store.replace(saved.discoveryId, { request: { destinations: ['杭州'] }, candidates: [candidate('hz2', '杭州')], warnings: [], sources: {} });
+  assert.equal(replaced.discoveryId, saved.discoveryId);
+  assert.equal(replaced.expiresAt, saved.expiresAt);
+  assert.equal(store.get(saved.discoveryId).candidates[0].id, 'hz2');
+});
+
 test('AMap navigation links encode a verified China coordinate and transport mode', () => {
   const url = new URL(amapNavigationUrl({ name: '西湖风景名胜区', lng: 120.1, lat: 30.2 }, 'drive'));
   assert.equal(url.origin, 'https://uri.amap.com');

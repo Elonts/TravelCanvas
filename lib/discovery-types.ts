@@ -33,6 +33,11 @@ export type DiscoveryResult = {
   discoveryId: string; expiresAt: string; request: TripRequest;
   candidates: DiscoveryCandidate[];
   guideSources: GuideSource[];
+  guideSearch: {
+    state: 'idle' | 'searching' | 'live' | 'partial' | 'failed';
+    code: 'not_configured' | 'unauthorized' | 'rate_limited' | 'quota_exceeded' | 'timeout' | 'provider_error' | 'irrelevant' | 'body_unavailable' | null;
+    message: string; attempts: number; count: number; retryable: boolean; queriedAt: string | null;
+  };
   sources: { search: 'live' | 'pending'; guides: 'live' | 'pending'; ai: 'live' | 'demo' | 'pending'; map: 'live' | 'pending'; updatedAt: string };
   warnings: string[];
 };

@@ -8,10 +8,11 @@ const labels = { attraction: '景区', food: '美食', entertainment: '娱乐' }
 const icons = { attraction: '景', food: '味', entertainment: '乐' };
 const stamp = (value: string) => new Date(value).toLocaleString('zh-CN');
 
-export function CandidatePicker({ discovery, selectedIds, busy, error, onToggle, onGenerate, onAddCustom }: {
-  discovery: DiscoveryResult; selectedIds: string[]; busy: boolean; error: string;
+export function CandidatePicker({ discovery, selectedIds, busy, guideBusy, error, onToggle, onGenerate, onAddCustom, onRetryGuides }: {
+  discovery: DiscoveryResult; selectedIds: string[]; busy: boolean; guideBusy: boolean; error: string;
   onToggle: (id: string) => void; onGenerate: () => void;
   onAddCustom: (city: string, kind: 'attraction', names: string[]) => Promise<void>;
+  onRetryGuides: () => void;
 }) {
   const [custom, setCustom] = useState<Record<string, string>>({});
   const [customError, setCustomError] = useState<Record<string, string>>({});
@@ -19,13 +20,14 @@ export function CandidatePicker({ discovery, selectedIds, busy, error, onToggle,
   const missingCities = discovery.request.destinations.filter(city => !discovery.candidates.some(candidate => candidate.city === city && candidate.kind !== 'food' && selected.has(candidate.id)));
   return <section className="candidate-panel panel">
     <div className="section-head"><div><span className="eyebrow">02 / 选择想去的地方</span><h2>先挑喜欢的，再安排路线</h2></div><small>候选保留到 {new Date(discovery.expiresAt).toLocaleTimeString('zh-CN')}</small></div>
-    <div className="notice">景区来源：AI {discovery.sources.ai === 'live' ? '建议已生成' : '使用降级候选'} · 高德 {discovery.sources.map === 'live' ? '地点已核验' : '部分待确认'} · 公开小红书攻略 {discovery.sources.guides === 'live' ? '已按目的地与偏好筛选' : '待确认'}。餐厅会在基础路线生成后再顺路查询。</div>
+    <div className={`guide-search-status ${discovery.guideSearch.state}`} role="status" aria-live="polite"><div><b>{discovery.guideSearch.state === 'searching' ? '正在补充公开攻略' : discovery.guideSearch.state === 'live' ? '公开攻略已补充' : discovery.guideSearch.state === 'partial' ? '公开攻略部分可用' : discovery.guideSearch.state === 'failed' ? '公开攻略未取得' : '公开攻略等待检索'}</b><p>{discovery.guideSearch.message}</p>{discovery.guideSearch.queriedAt && <small>查询 {stamp(discovery.guideSearch.queriedAt)} · 尝试 {discovery.guideSearch.attempts} 次</small>}</div>{discovery.guideSearch.retryable && discovery.guideSearch.state !== 'searching' && <button type="button" className="secondary" disabled={guideBusy} onClick={onRetryGuides}>{guideBusy ? '正在重试…' : '重新检索攻略'}</button>}</div>
+    <div className="notice">景区来源：AI {discovery.sources.ai === 'live' ? '建议已生成' : '使用降级候选'} · 高德 {discovery.sources.map === 'live' ? '地点已核验' : '部分待确认'}。攻略只覆盖 Tavily 公开收录内容；餐厅会在基础路线生成后再顺路查询。</div>
     {!!discovery.guideSources.length && <details className="candidate-warnings guide-sources"><summary>公开攻略综合推荐来源（各目的地最多 8 篇）</summary>{discovery.guideSources.map(source => <p key={source.id}><b>{source.city} · 相关性第 {source.rank} 篇</b> · <a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a> · {source.contentState === 'full' ? '公开正文' : '搜索摘要'} · 查询 {stamp(source.queriedAt)}</p>)}</details>}
     {!!discovery.warnings.length && <details className="candidate-warnings"><summary>查看数据提示（{discovery.warnings.length}）</summary>{discovery.warnings.map(warning => <p key={warning}>{warning}</p>)}</details>}
     {discovery.request.destinations.map(city => <section className="candidate-city" key={city}>
       <h3>{city}</h3>
       {(['attraction'] as const).map(kind => {
-        const items = discovery.candidates.filter(candidate => candidate.city === city && candidate.kind === kind);
+        const items = discovery.candidates.filter(candidate => candidate.city === city && candidate.kind === kind).sort((a, b) => Number(selected.has(b.id)) - Number(selected.has(a.id)) || b.guideScore - a.guideScore);
         return <div className="candidate-category" key={kind}><div className="candidate-category-title"><b>{labels[kind]}</b><span>{items.length} 个候选</span></div>
           {items.length ? <div className="candidate-grid">{items.map(candidate => <CandidateCard key={candidate.id} candidate={candidate} checked={selected.has(candidate.id)} onToggle={onToggle} />)}</div> : <p className="candidate-empty">暂无已核验的{labels[kind]}候选。</p>}
           <CustomPlaceInput city={city} kind={kind} value={custom[`${city}:${kind}`] || ''} busy={busy} error={customError[`${city}:${kind}`] || ''}

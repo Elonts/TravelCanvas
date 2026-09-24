@@ -68,7 +68,9 @@ try {
         assert.equal(await page.locator('.candidate-card').count(), 0);
         assert.equal(await page.getByRole('button', { name: /生成基础路线并顺路找美食/ }).isDisabled(), true);
         assert.ok((await page.locator('.candidate-panel').innerText()).includes('高德 部分待确认'));
+        await page.getByText('公开攻略未取得').waitFor({ timeout: 60000 });
       } else {
+        await page.getByText(/公开攻略已补充|公开攻略部分可用/).waitFor({ timeout: 60000 });
         const customAttraction = page.getByText('没有想去的景点？批量添加').locator('..');
         await customAttraction.getByRole('textbox').fill('雷峰塔、灵隐寺');
         await customAttraction.getByRole('button', { name: /核验并加入候选/ }).click();

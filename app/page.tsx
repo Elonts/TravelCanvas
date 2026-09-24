@@ -22,6 +22,7 @@ export default function Home() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [changing, setChanging] = useState(false);
+  const [guidesLoading, setGuidesLoading] = useState(false);
   const [error, setError] = useState('');
   const [changeError, setChangeError] = useState('');
   const [destinations, setDestinations] = useState<string[]>([]);
@@ -54,9 +55,21 @@ export default function Home() {
       (body as Record<string, unknown>).transport = body.localTransport;
       const response = await fetch('/api/discover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const json = await response.json(); if (!response.ok) throw Error(json.error);
-      setDiscovery(json); setSelectedIds([]); setPlan(null); setCandidateExpanded(true);
+      setDiscovery(json); setSelectedIds([]); setPlan(null); setCandidateExpanded(true); void refreshGuides(json.discoveryId);
     } catch (e) { setError(userFacingRequestError(e, '候选发现失败')); } finally { setLoading(false); }
   }
+  const refreshGuides = async (discoveryId: string) => {
+    if (guidesLoading) return;
+    setGuidesLoading(true);
+    setDiscovery(current => current?.discoveryId === discoveryId ? { ...current, guideSearch: { ...current.guideSearch, state: 'searching', message: '正在补充目的地相关公开攻略…' } } : current);
+    try {
+      const response = await fetch('/api/discover/guides', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discoveryId }) });
+      const json = await response.json(); if (!response.ok) throw Error(json.error);
+      setDiscovery(current => current?.discoveryId === discoveryId ? json : current);
+    } catch (cause) {
+      setDiscovery(current => current?.discoveryId === discoveryId ? { ...current, guideSearch: { ...current.guideSearch, state: 'failed', code: 'provider_error', message: userFacingRequestError(cause, '公开攻略检索失败'), retryable: true, queriedAt: new Date().toISOString() } } : current);
+    } finally { setGuidesLoading(false); }
+  };
   const generatePlan = async () => {
     if (!discovery || loading) return;
     setLoading(true); setError('');
@@ -164,7 +177,7 @@ export default function Home() {
       <aside className="experience-map"><JourneyCanvas destinations={destinations} discovery={discovery} selectedIds={selectedIds} plan={plan} loading={loading} /></aside>
       {(discovery || plan) && <div className="stage-content">
         {discovery && (candidateExpanded
-          ? <CandidatePicker discovery={discovery} selectedIds={selectedIds} busy={loading} error={plan ? '' : error} onToggle={toggleCandidate} onGenerate={generatePlan} onAddCustom={addCustomCandidates} />
+          ? <CandidatePicker discovery={discovery} selectedIds={selectedIds} busy={loading} guideBusy={guidesLoading} error={plan ? '' : error} onToggle={toggleCandidate} onGenerate={generatePlan} onAddCustom={addCustomCandidates} onRetryGuides={() => refreshGuides(discovery.discoveryId)} />
           : <section className="candidate-summary panel"><div><span className="eyebrow">02 / 选择想去的地方</span><h2>已收起景区候选</h2><p>已选 {discovery.candidates.filter(candidate => selectedIds.includes(candidate.id) && candidate.kind === 'attraction').length} 个景区。餐厅已按生成后的基础路线另行查询；展开修改景区后需重新生成路线。</p></div><button type="button" className="secondary" onClick={() => setCandidateExpanded(true)}>展开并修改选择</button></section>)}
         {plan && <PlanView plan={plan} busy={loading || changing} onAction={change} onSearchRestaurants={searchRestaurants} onSearchEntertainment={searchEntertainment} onReplanDay={replanDay} changeError={changeError} />}
       </div>}
