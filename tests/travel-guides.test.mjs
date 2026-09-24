@@ -15,8 +15,8 @@ test('guide search starts with a lower-latency destination query and keeps at mo
       { title: '非法', url: 'https://example.com/post', content: '非法来源', score: 2 },
     ] });
   });
-  assert.match(body.query, /杭州.*旅游攻略.*必去.*避雷/);
-  assert.deepEqual(body.include_domains, ['xiaohongshu.com']);
+  assert.match(body.query, /site:www\.xiaohongshu\.com\/explore.*杭州.*旅游攻略.*景点/);
+  assert.deepEqual(body.include_domains, ['www.xiaohongshu.com']);
   assert.equal(body.search_depth, 'basic');
   assert.equal(body.max_results, 12);
   assert.equal(result.sources.length, 8);
@@ -98,4 +98,15 @@ test('sparse basic results trigger one preference-aware advanced query', async (
   assert.deepEqual(bodies.map(body => body.search_depth), ['basic', 'advanced']);
   assert.match(bodies[1].query, /园林.*少走路/);
   assert.equal(result.sources.length, 2);
+});
+
+test('advanced guide query uses verified core attractions to avoid ambiguous generic search terms', async () => {
+  const bodies = [];
+  await searchTravelGuides('珠海', '经典景点', '少走路', env, async (_url, options) => {
+    const body = JSON.parse(options.body); bodies.push(body);
+    return response({ results: [] });
+  }, ['圆明新园', '情侣路', '日月贝']);
+  assert.match(bodies[1].query, /珠海.*小红书.*圆明新园.*情侣路.*日月贝.*经典景点.*少走路/);
+  assert.equal(bodies[1].max_results, 20);
+  assert.doesNotMatch(bodies[0].query, /避雷/);
 });

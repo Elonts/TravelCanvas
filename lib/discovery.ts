@@ -131,7 +131,8 @@ export async function discoverCandidates(request: TripRequest) {
 
 export async function enrichDiscoveryWithGuides(discovery: Awaited<ReturnType<typeof discoverCandidates>>) {
   const { request } = discovery;
-  const searches = await Promise.all(request.destinations.map(city => searchTravelGuides(city, request.preferences, request.constraints)));
+  const searches = await Promise.all(request.destinations.map(city => searchTravelGuides(city, request.preferences, request.constraints, process.env, fetch,
+    discovery.candidates.filter(candidate => candidate.city === city && candidate.kind === 'attraction').slice(0, 6).map(candidate => candidate.name))));
   const rawSources = searches.flatMap(search => search.sources);
   const allGuideSources = await enrichGuideBodies(rawSources);
   const aiInsights = await extractGuideInsights(allGuideSources);
