@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { enrichGuideBodies, extractGuideInsights, isGuideRelevant, searchTravelGuides, validateGuideInsights } from '../lib/travel-guides.mjs';
+import { enrichGuideBodies, extractGuideFoodInsights, extractGuideInsights, isGuideRelevant, searchTravelGuides, validateGuideFoodInsights, validateGuideInsights } from '../lib/travel-guides.mjs';
 
 const env = { TAVILY_API_KEY: 'test', DEEPSEEK_API_KEY: 'test' };
 const response = value => new Response(JSON.stringify(value), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -24,14 +24,15 @@ test('guide search starts with a lower-latency destination query and keeps at mo
   assert.deepEqual(result.sources.map(item => item.rank), [1, 2, 3, 4, 5, 6, 7, 8]);
 });
 
-test('guide results must mention the requested destination before they can be shown', async () => {
+test('guide search keeps a broad pool so body and verified POIs can establish destination relevance later', async () => {
   assert.equal(isGuideRelevant('杭州', { title: '成都三日游', content: '宽窄巷子和熊猫基地' }), false);
   assert.equal(isGuideRelevant('杭州市', { title: '周末攻略', content: '杭州西湖清晨人少' }), true);
   const result = await searchTravelGuides('杭州', '茶文化', '少走路', env, async () => response({ results: [
     { title: '成都攻略', url: 'https://www.xiaohongshu.com/explore/cd001', content: '成都熊猫基地', score: 1 },
     { title: '杭州慢游', url: 'https://www.xiaohongshu.com/explore/hz001', content: '杭州茶文化和西湖路线', score: .8 },
   ] }));
-  assert.deepEqual(result.sources.map(source => source.title), ['杭州慢游']);
+  assert.deepEqual(result.sources.map(source => source.title), ['成都攻略', '杭州慢游']);
+  assert.equal(result.stats.searched, 4);
 });
 
 test('public body enrichment marks each article independently and keeps summaries when reading fails', async () => {
@@ -52,6 +53,18 @@ test('guide insights require a literal place name and continuous quote from the 
   const extracted = await extractGuideInsights(sources, env, async (_url, options) => {
     const payload = JSON.parse(options.body);
     assert.match(payload.messages[0].content, /旅行攻略证据抽取器/);
+    return response({ choices: [{ message: { content: JSON.stringify({ insights: [valid] }) } }] });
+  });
+  assert.deepEqual(extracted, [valid]);
+});
+
+test('food mentions in travel guides require a literal branch and continuous evidence', async () => {
+  const sources = [{ id: 'g1', city: '杭州', content: '测试江南餐厅（西湖店）的东坡肉值得尝试。' }];
+  const valid = { sourceId: 'g1', placeName: '测试江南餐厅（西湖店）', quote: '测试江南餐厅（西湖店）的东坡肉值得尝试', dishes: ['东坡肉'] };
+  assert.deepEqual(validateGuideFoodInsights({ insights: [valid, { ...valid, placeName: '另一家店' }] }, sources), [valid]);
+  const extracted = await extractGuideFoodInsights(sources, env, async (_url, options) => {
+    const payload = JSON.parse(options.body);
+    assert.match(payload.messages[0].content, /餐饮证据抽取器/);
     return response({ choices: [{ message: { content: JSON.stringify({ insights: [valid] }) } }] });
   });
   assert.deepEqual(extracted, [valid]);

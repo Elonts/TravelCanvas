@@ -102,9 +102,9 @@ async function routePaths(points: RoutePoint[], map: MapProvider | null, transpo
   return paths;
 }
 
-function selectedFood(candidates: DiscoveryCandidate[]) {
+function selectedFood(candidates: DiscoveryCandidate[], preferred = true) {
   return candidates.filter(candidate => candidate.kind === 'food').map(candidate => ({
-    id: candidate.poiId, city: candidate.city, preferred: true, name: candidate.name, address: candidate.address, lng: candidate.lng, lat: candidate.lat,
+    id: candidate.poiId, city: candidate.city, preferred, name: candidate.name, address: candidate.address, lng: candidate.lng, lat: candidate.lat,
     category: candidate.category, price: candidate.price, hours: candidate.hours, source: candidate.source, queriedAt: candidate.queriedAt,
     imageUrl: candidate.imageUrl, imageAttribution: candidate.imageAttribution, navigationUrl: candidate.navigationUrl, tips: candidate.evidence.map((evidence, index) => ({ id: `discovery-tip-${index}`, sourceId: evidence.sourceId, placeName: candidate.name, text: evidence.quote, quote: evidence.quote, dishes: evidence.dishes, category: 'food' as const, state: 'pending' as const })),
     featuredDishes: candidate.featuredDishes || [],
@@ -132,7 +132,7 @@ export function budgetMeta(request: TripRequest, route: RouteOverview): BudgetMe
   return { transportMode: labels[request.transport], rule: rules[request.transport], knownTransportCost: Math.round(legs.reduce((sum, leg) => sum + fareForGroup(leg), 0)), pendingLegs: legs.filter(leg => leg.fare === null || leg.state !== 'live').length };
 }
 
-export async function buildPlan(request: TripRequest, selected: DiscoveryCandidate[] | null = null, guides: GuideSource[] = []): Promise<Plan> {
+export async function buildPlan(request: TripRequest, selected: DiscoveryCandidate[] | null = null, guides: GuideSource[] = [], guideFoodCandidates: DiscoveryCandidate[] = []): Promise<Plan> {
   const testMapInterval = process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400;
   const map = process.env.AMAP_API_KEY ? createMapProvider(process.env, fetch, { intervalMs: testMapInterval }) : null;
   const orderedCities = await orderDestinations(request, map);
@@ -165,8 +165,8 @@ export async function buildPlan(request: TripRequest, selected: DiscoveryCandida
   days.splice(0, days.length, ...reservationDays);
   const budget = allocateBudget(request);
   const primaryCity = orderedCities.destinations[0].name;
-  const preferredRestaurants = selected ? selectedFood(selected) : [];
-  const selectedSources = selected ? discoverySources(selected) : [];
+  const preferredRestaurants = [...(selected ? selectedFood(selected) : []), ...selectedFood(guideFoodCandidates, false)];
+  const selectedSources = discoverySources([...(selected || []), ...guideFoodCandidates]);
   const reusedSources = selectedSources.length ? selectedSources : null;
   const buildSelectedFoodPlan = buildFoodPlan as unknown as (request: TripRequest, days: Day[], budget: Record<string, number>, env: NodeJS.ProcessEnv, fetcher: typeof fetch, options: { mapIntervalMs: number; preferredRestaurants: ReturnType<typeof selectedFood>; discoverySources: ReturnType<typeof discoverySources> | null }) => Promise<FoodPlan>;
   const dailyWeatherPromise = Promise.all(days.map(day => queryWeather(day.city, day.date, orderedCities.destinations.find(item => item.name === day.city)?.location || null)));

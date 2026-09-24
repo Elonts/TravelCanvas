@@ -6,7 +6,8 @@ import type { DiscoveryCandidate, DiscoveryEvidence } from './discovery-types';
 import type { TripRequest, DataState } from './plan';
 import { amapImageAttribution, fillMissingWebImages } from './web-images.mjs';
 import { attractionPreferenceFit, foodPreferenceTerms } from './preference-fit.mjs';
-import { enrichGuideBodies, extractGuideInsights, searchTravelGuides } from './travel-guides.mjs';
+import { enrichGuideBodies, extractGuideFoodInsights, extractGuideInsights, isGuideRelevant, searchTravelGuides } from './travel-guides.mjs';
+import { collapseScenicChildren } from './scenic-groups.mjs';
 
 const suggestionSchema = z.object({
   attractions: z.array(z.object({ name: z.string().trim().min(2).max(100), reason: z.string().trim().min(2).max(240) })).max(8),
@@ -83,7 +84,7 @@ function makeCandidate(place: any, kind: DiscoveryCandidate['kind'], request: Tr
     : guideEvidence.length ? `${new Set(guideEvidence.map(item => item.sourceId)).size} 篇公开攻略提及，并已通过高德地点核验。` : `根据“${request.preferences || '综合体验'}”生成，并已通过高德地点核验。`);
   const queriedAt = new Date().toISOString();
   return {
-    id: `${kind}:${place.city}:${place.poiId}`, poiId: place.poiId, kind, city: place.city, name: place.name, address: place.address,
+    id: `${kind}:${place.city}:${place.poiId}`, poiId: place.poiId, parentPoiId: place.parentPoiId || null, rootPoiId: place.parentPoiId || place.poiId, scenicRole: place.parentPoiId ? 'child' : 'main', kind, city: place.city, name: place.name, address: place.address,
     lng: place.lng, lat: place.lat, category: place.category, imageUrl: place.imageUrl, imageAttribution: amapImageAttribution(place.imageUrl, queriedAt), durationMinutes: kind === 'attraction' ? 120 : kind === 'entertainment' ? 90 : 60,
     estimatedCost: kind === 'food' ? place.price?.high ?? null : null, price: place.price, hours: place.hours,
     introduction: evidence[0]?.quote || guideEvidence[0]?.quote || `${place.category} · ${place.address || `${place.city}，详细地址待确认`}`,
@@ -91,6 +92,12 @@ function makeCandidate(place: any, kind: DiscoveryCandidate['kind'], request: Tr
     queriedAt, verified: true, navigationUrl: place.navigationUrl, evidence, evidenceScore: score, featuredDishes: [...new Set(evidence.flatMap(item => item.dishes || []))],
     guideEvidence, guideScore, preferenceFitScore: attractionFit?.score, constraintWarning: attractionFit?.caution || undefined,
   };
+}
+
+function sourceMatchesDestination(source: Awaited<ReturnType<typeof enrichGuideBodies>>[number], candidates: DiscoveryCandidate[]) {
+  if (isGuideRelevant(source.city, source)) return true;
+  const content = normalize(source.content);
+  return candidates.some(candidate => candidate.city === source.city && content.includes(normalize(candidate.name)));
 }
 
 export async function discoverCandidates(request: TripRequest) {
@@ -108,7 +115,7 @@ export async function discoverCandidates(request: TripRequest) {
     const reasons = new Map(suggestion.attractions.map(item => [normalize(item.name), item.reason]));
     if (!map) { mapStates.push('pending'); continue; }
     const attractions = await map.discover(city, 'attraction', suggestion.attractions.map(item => item.name), Math.min(20, Math.max(6, request.days * 3 + 3)), request.transport);
-    const rankedAttractions = attractions.map(place => makeCandidate(place, 'attraction', request, reasons, cityTips, sources)).filter(candidate => !attractionPreferenceFit(candidate, request).excluded).sort((a, b) => (b.preferenceFitScore || 0) - (a.preferenceFitScore || 0));
+    const rankedAttractions = collapseScenicChildren(attractions.map(place => makeCandidate(place, 'attraction', request, reasons, cityTips, sources))).filter(candidate => !attractionPreferenceFit(candidate, request).excluded).sort((a, b) => (b.preferenceFitScore || 0) - (a.preferenceFitScore || 0));
     candidates.push(...rankedAttractions);
     mapStates.push(attractions.length ? 'live' : 'pending');
   }
@@ -126,25 +133,47 @@ export async function enrichDiscoveryWithGuides(discovery: Awaited<ReturnType<ty
   const { request } = discovery;
   const searches = await Promise.all(request.destinations.map(city => searchTravelGuides(city, request.preferences, request.constraints)));
   const rawSources = searches.flatMap(search => search.sources);
-  const guideSources = await enrichGuideBodies(rawSources);
-  const aiInsights = await extractGuideInsights(guideSources);
-  const literalInsights = literalGuideInsights(discovery.candidates, guideSources);
+  const allGuideSources = await enrichGuideBodies(rawSources);
+  const aiInsights = await extractGuideInsights(allGuideSources);
+  const literalInsights = literalGuideInsights(discovery.candidates, allGuideSources);
   const insightKeys = new Set(aiInsights.map(item => `${item.sourceId}:${normalize(item.placeName)}`));
   const insights = [...aiInsights, ...literalInsights.filter(item => !insightKeys.has(`${item.sourceId}:${normalize(item.placeName)}`))];
-  let candidates = discovery.candidates.map(candidate => withGuideEvidence(candidate, insights, guideSources));
+  let candidates = [...discovery.candidates];
   const map = process.env.AMAP_API_KEY ? createMapProvider(process.env, fetch, { intervalMs: process.env.TRAVELCANVAS_TEST_MODE ? 0 : 400 }) : null;
   if (map && aiInsights.length) {
     for (const city of request.destinations) {
-      const citySources = guideSources.filter(source => source.city === city), sourceIds = new Set(citySources.map(source => source.id));
+      const citySources = allGuideSources.filter(source => source.city === city), sourceIds = new Set(citySources.map(source => source.id));
       const cityInsights = insights.filter(item => sourceIds.has(item.sourceId));
       const names = [...new Set(cityInsights.map(item => item.placeName))].filter(name => !candidates.some(candidate => candidate.city === city && normalize(candidate.name) === normalize(name)));
       if (!names.length) continue;
       const places = await map.discover(city, 'attraction', names.slice(0, 8), Math.min(12, names.length * 2), request.transport);
       const reasons = new Map(names.map(name => [normalize(name), '公开攻略提及，并经高德核验为当前目的地景区。']));
-      const additions = places.map(place => makeCandidate(place, 'attraction', request, reasons, [], [], cityInsights, citySources)).filter(candidate => !candidates.some(existing => existing.poiId === candidate.poiId));
+      const additions = places.map(place => makeCandidate(place, 'attraction', request, reasons, [], [])).filter(candidate => !candidates.some(existing => existing.poiId === candidate.poiId));
       candidates.push(...additions);
     }
   }
+  candidates = collapseScenicChildren(candidates);
+  const guideSources = allGuideSources.filter(source => sourceMatchesDestination(source, candidates)).map((source, index, all) => ({ ...source, rank: all.filter(item => item.city === source.city).findIndex(item => item.id === source.id) + 1 }));
+  const relevantSourceIds = new Set(guideSources.map(source => source.id));
+  const relevantInsights = insights.filter(insight => relevantSourceIds.has(insight.sourceId));
+  candidates = candidates.map(candidate => withGuideEvidence(candidate, relevantInsights, guideSources));
+  const guideFoodInsights = await extractGuideFoodInsights(guideSources);
+  const guideFoodCandidates: DiscoveryCandidate[] = [];
+  if (map && guideFoodInsights.length) {
+    for (const city of request.destinations) {
+      const citySourceIds = new Set(guideSources.filter(source => source.city === city).map(source => source.id));
+      const cityInsights = guideFoodInsights.filter(insight => citySourceIds.has(insight.sourceId));
+      const names = [...new Set(cityInsights.map(insight => insight.placeName))].slice(0, 20);
+      if (!names.length) continue;
+      const places = await map.discover(city, 'food', names, Math.min(40, Math.max(12, names.length * 3)), request.transport);
+      const tips = cityInsights.map((insight, index) => ({ id: `guide-food-${index}`, sourceId: insight.sourceId, placeName: insight.placeName, text: insight.quote, quote: insight.quote, dishes: insight.dishes, category: 'ranking' as const, state: 'pending' as const }));
+      const foodSources = guideSources.filter(source => citySourceIds.has(source.id)).map(source => ({ id: source.id, title: source.title, url: source.url, content: source.content, kind: 'search' as const, publishedAt: source.publishedAt, queriedAt: source.queriedAt }));
+      const reasons = new Map(names.map(name => [normalize(name), '公开旅游攻略提及，并经高德核验到当前目的地具体餐饮 POI。']));
+      const exactPlaces = places.filter(place => names.some(name => normalize(name) === normalize(place.name)));
+      guideFoodCandidates.push(...exactPlaces.map(place => makeCandidate(place, 'food', request, reasons, tips, foodSources)).filter((candidate, index, all) => all.findIndex(other => other.poiId === candidate.poiId) === index));
+    }
+  }
+  guideFoodCandidates.sort((a, b) => b.evidenceScore - a.evidenceScore);
   candidates = request.destinations.flatMap(city => candidates.filter(candidate => candidate.city === city).sort((a, b) => b.guideScore - a.guideScore || (b.preferenceFitScore || 0) - (a.preferenceFitScore || 0)));
   const warnings = [...discovery.warnings.filter(warning => !warning.includes('攻略：'))];
   searches.forEach((search, index) => { if (search.warning) warnings.push(`${request.destinations[index]}攻略：${search.warning}`); });
@@ -152,11 +181,16 @@ export async function enrichDiscoveryWithGuides(discovery: Awaited<ReturnType<ty
   const allSummary = guideSources.length > 0 && guideSources.every(source => source.contentState === 'summary');
   const state = !guideSources.length ? 'failed' : failed.length || allSummary ? 'partial' : 'live';
   const mainError = failed[0];
-  const message = !guideSources.length ? mainError?.warning || '没有取得可用的公开攻略' : allSummary ? `已获得 ${guideSources.length} 篇搜索摘要，公开正文暂不可读取。` : failed.length ? `已获得 ${guideSources.length} 篇攻略，部分目的地检索失败。` : `已获得 ${guideSources.length} 篇目的地相关公开攻略。`;
+  const searchedCount = searches.reduce((sum, item) => sum + (item.stats?.searched || 0), 0);
+  const duplicateCount = searches.reduce((sum, item) => sum + (item.stats?.duplicate || 0), 0);
+  const invalidCount = searches.reduce((sum, item) => sum + (item.stats?.invalid || 0), 0);
+  const unrelatedCount = Math.max(0, rawSources.length - guideSources.length);
+  const bodyUnavailable = guideSources.filter(source => source.contentState === 'summary').length;
+  const message = !guideSources.length ? mainError?.warning || `搜索了 ${searchedCount} 篇公开内容，但没有任何内容能通过目的地或高德地点核验。` : allSummary ? `搜索 ${searchedCount} 篇，保留 ${guideSources.length} 篇目的地相关摘要；公开正文暂不可读取。` : failed.length ? `搜索 ${searchedCount} 篇，保留 ${guideSources.length} 篇；部分目的地检索失败。` : `搜索 ${searchedCount} 篇，保留 ${guideSources.length} 篇目的地相关公开攻略。`;
   return {
-    ...discovery, candidates, warnings,
+    ...discovery, candidates, guideFoodCandidates: guideFoodCandidates.slice(0, 20), warnings,
     guideSources: guideSources.map(({ content: _content, ...source }) => source),
-    guideSearch: { state, code: mainError?.code || (allSummary ? 'body_unavailable' : null), message, attempts: searches.reduce((sum, item) => sum + item.attempts, 0), count: guideSources.length, retryable: Boolean(mainError?.retryable || allSummary), queriedAt: new Date().toISOString() },
+    guideSearch: { state, code: !guideSources.length ? 'irrelevant' : mainError?.code || (allSummary ? 'body_unavailable' : null), message, attempts: searches.reduce((sum, item) => sum + item.attempts, 0), count: guideSources.length, retryable: Boolean(!guideSources.length || mainError?.retryable || allSummary), queriedAt: new Date().toISOString(), stats: { searched: searchedCount, kept: guideSources.length, duplicate: duplicateCount, invalid: invalidCount, unrelated: unrelatedCount, bodyUnavailable } },
     sources: { ...discovery.sources, guides: guideSources.length ? 'live' as const : 'pending' as const, updatedAt: new Date().toISOString() },
   };
 }

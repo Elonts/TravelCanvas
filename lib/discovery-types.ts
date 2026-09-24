@@ -19,6 +19,7 @@ export type GuideSource = {
 
 export type DiscoveryCandidate = {
   id: string; poiId: string; kind: 'attraction' | 'food' | 'entertainment';
+  parentPoiId?: string | null; rootPoiId?: string; scenicRole?: 'main' | 'child';
   city: string; name: string; address: string; lng: number; lat: number;
   category: string; imageUrl: string | null; imageAttribution?: ImageAttribution | null; introduction: string;
   recommendationReason: string; durationMinutes: number; estimatedCost: number | null;
@@ -32,11 +33,13 @@ export type DiscoveryCandidate = {
 export type DiscoveryResult = {
   discoveryId: string; expiresAt: string; request: TripRequest;
   candidates: DiscoveryCandidate[];
+  guideFoodCandidates?: DiscoveryCandidate[];
   guideSources: GuideSource[];
   guideSearch: {
     state: 'idle' | 'searching' | 'live' | 'partial' | 'failed';
     code: 'not_configured' | 'unauthorized' | 'rate_limited' | 'quota_exceeded' | 'timeout' | 'provider_error' | 'irrelevant' | 'body_unavailable' | null;
     message: string; attempts: number; count: number; retryable: boolean; queriedAt: string | null;
+    stats?: { searched: number; kept: number; duplicate: number; invalid: number; unrelated: number; bodyUnavailable: number };
   };
   sources: { search: 'live' | 'pending'; guides: 'live' | 'pending'; ai: 'live' | 'demo' | 'pending'; map: 'live' | 'pending'; updatedAt: string };
   warnings: string[];

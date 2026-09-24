@@ -1,0 +1,1 @@
+export function collapseScenicChildren<T extends { poiId: string; parentPoiId?: string | null; city: string; name: string; guideEvidence: unknown[]; guideScore: number; introduction: string }>(candidates: T[]): T[];

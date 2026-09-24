@@ -59,3 +59,9 @@ test('discovery POIs must match the requested category and expose proxied image 
   assert.ok(venue.navigationUrl.includes('mode=bus'));
   assert.equal(normalizeDiscoveryPoi(raw, '杭州', 'food'), null);
 });
+
+test('discovery POIs preserve the AMap parent id used to collapse internal scenic areas', () => {
+  const raw = { id: 'child', parent: 'main', name: '圆明新园-万花阵', location: '113.5,22.2', address: '珠海', type: '风景名胜;景点', typecode: '110202' };
+  const place = normalizeDiscoveryPoi(raw, '珠海', 'attraction');
+  assert.equal(place.parentPoiId, 'main');
+});

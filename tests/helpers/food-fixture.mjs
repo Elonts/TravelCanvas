@@ -10,7 +10,7 @@ export async function fixtureFetch(input, options = {}) {
   const reply = value => new Response(JSON.stringify(value), { status: 200, headers: { 'Content-Type': 'application/json' } });
   if (url.hostname === 'api.tavily.com') {
     const body = JSON.parse(options.body);
-    if (body.query.includes('旅游攻略')) return reply({ results: Array.from({ length: 8 }, (_, index) => ({ title: `杭州旅游攻略${index + 1}（测试）`, url: `https://www.xiaohongshu.com/explore/guideabc${index}`, content: index === 0 ? '西湖风景名胜区游客较多，建议清晨到达并穿舒适的鞋。' : `杭州公开旅游攻略摘要${index + 1}`, published_date: '2026-09-01', score: 1 - index / 10 })) });
+    if (body.query.includes('旅游攻略')) return reply({ results: Array.from({ length: 8 }, (_, index) => ({ title: `杭州旅游攻略${index + 1}（测试）`, url: `https://www.xiaohongshu.com/explore/guideabc${index}`, content: index === 0 ? '西湖风景名胜区游客较多，建议清晨到达并穿舒适的鞋。测试江南餐厅（西湖店）在美食推荐榜中被提到。' : `杭州公开旅游攻略摘要${index + 1}`, published_date: '2026-09-01', score: 1 - index / 10 })) });
     return reply({ results: [{ title: '杭州美食经验（测试）', url: 'https://www.xiaohongshu.com/explore/abcdef123', content: fixtureContent, published_date: '2026-09-01' }] });
   }
   if (url.hostname === 'api.deepseek.com') {
@@ -18,11 +18,13 @@ export async function fixtureFetch(input, options = {}) {
     if (body.messages[1].content.includes('模拟AI失败')) throw Error('Simulated model outage');
     const extraction = body.messages[0].content.includes('不可信资料');
     const guideExtraction = body.messages[0].content.includes('旅行攻略证据抽取器');
+    const guideFoodExtraction = body.messages[0].content.includes('餐饮证据抽取器');
     const discovery = body.messages[0].content.includes('旅行候选发现助手');
     const count = Number(body.messages[1].content.match(/推荐 (\d+) 个/)?.[1] || 4);
     const places = body.messages[1].content.includes('老年人') ? ['峡谷高空攀岩', '城市博物馆', '湖滨公园', '历史文化馆'] : ['西湖风景名胜区', '中国茶叶博物馆（双峰馆区）', '灵隐寺', '河坊街', ...Array.from({ length: 26 }, (_, i) => `测试景点${i + 5}`)];
-    const sourceId = extraction || guideExtraction ? JSON.parse(body.messages[1].content)[0]?.id || 'search-0' : 'search-0';
-    const content = guideExtraction ? { insights: [{ sourceId, placeName: '西湖风景名胜区', quote: '西湖风景名胜区游客较多，建议清晨到达', advice: '清晨到达' }] }
+    const sourceId = extraction || guideExtraction || guideFoodExtraction ? JSON.parse(body.messages[1].content)[0]?.id || 'search-0' : 'search-0';
+    const content = guideFoodExtraction ? { insights: [{ sourceId, placeName: '测试江南餐厅（西湖店）', quote: '测试江南餐厅（西湖店）在美食推荐榜中被提到', dishes: [] }] }
+      : guideExtraction ? { insights: [{ sourceId, placeName: '西湖风景名胜区', quote: '西湖风景名胜区游客较多，建议清晨到达', advice: '清晨到达' }] }
       : extraction ? { tips: [{ sourceId, placeName: '测试江南餐厅（西湖店）', quote: '测试江南餐厅（西湖店）在美食推荐榜中被提到，建议提前取号', category: 'ranking' }, { sourceId, placeName: '西湖风景名胜区', quote: '西湖风景名胜区步行距离较长，建议穿舒适鞋', category: 'travel' }] }
       : discovery ? { attractions: places.slice(0, 4).map(name => ({ name, reason: '符合测试旅行偏好，地点仍需高德核验。' })), entertainment: ['测试剧场', '测试乐园', '测试文化馆'].map(name => ({ name, reason: '适合轻松体验，营业信息待确认。' })) }
       : { places: places.slice(0, count) };
