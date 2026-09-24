@@ -78,8 +78,9 @@
 .anchor-heading button, .anchor-actions button { width: auto; }
 .hotel-editor, .intercity-editor { display: grid; gap: 11px; padding: 13px; background: #f2f4ef; border: 1px solid #dce3d9; border-radius: 9px; }
 .hotel-editor-main { display: grid; grid-template-columns: minmax(110px, .6fr) minmax(220px, 2fr); gap: 9px; }
-.hotel-editor-details { display: grid; grid-template-columns: minmax(220px, 2fr) minmax(130px, 1fr) minmax(130px, 1fr); gap: 9px; }
+.hotel-editor-dates { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 9px; }
 .hotel-name-field, .hotel-address-field { min-width: 0; }
+.hotel-editor input, .hotel-editor select, .intercity-editor input, .intercity-editor select { min-width: 0; }
 .anchor-actions { display: flex; gap: 14px; align-items: center; }
 .verified-place { margin: 0; padding: 9px 10px; color: var(--green); font-size: 12px; line-height: 1.55; background: #e3eee7; border-radius: 7px; }
 .place-candidates { display: grid; gap: 6px; }
@@ -161,7 +162,7 @@
 .preference-checks input { width: auto; }
 
 @media (max-width: 760px) {
-  .hotel-editor-main, .hotel-editor-details, .hub-grid, .intercity-times { grid-template-columns: 1fr; }
+  .hotel-editor-main, .hotel-editor-dates, .hub-grid, .intercity-times { grid-template-columns: 1fr; }
   .intercity-times label:last-child { grid-column: auto; }
   .destination-field { grid-column: auto; }
   .city-groups section > div { grid-template-columns: repeat(3, 1fr); }
@@ -204,11 +205,11 @@
 .journey-live .route-map { margin: 0; }
 .journey-live .map-title { align-items: flex-start; }
 
-@media (min-width: 1051px) {
+@media (min-width: 1241px) {
   .stage-content .selection-bar { bottom: 18px; }
 }
 
-@media (max-width: 1050px) and (min-width: 761px) {
+@media (max-width: 1240px) and (min-width: 761px) {
   .candidate-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .candidate-card { grid-template-columns: 135px minmax(0, 1fr); }
 }

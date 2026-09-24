@@ -54,8 +54,8 @@ export function TravelAnchors({ destinations, hotels, onHotelsChange, legs, onLe
           <label>城市<select aria-label={`酒店 ${index + 1} 城市`} value={hotel.city} onChange={event => updateHotel(index, { city: event.target.value }, true)}>{destinations.map(city => <option key={city}>{city}</option>)}</select></label>
           <label className="hotel-name-field">酒店正式名称<input aria-label={`酒店 ${index + 1} 名称`} value={hotel.name} onChange={event => updateHotel(index, { name: event.target.value }, true)} maxLength={120} placeholder="输入完整酒店名或分店名" /></label>
         </div>
-        <div className="hotel-editor-details">
-          <label className="hotel-address-field">地址或分店提示<input aria-label={`酒店 ${index + 1} 地址`} value={hotel.addressHint} onChange={event => updateHotel(index, { addressHint: event.target.value }, true)} maxLength={160} placeholder="例如：西湖区、湖滨路店" /></label>
+        <label className="hotel-address-field">地址或分店提示<input aria-label={`酒店 ${index + 1} 地址`} value={hotel.addressHint} onChange={event => updateHotel(index, { addressHint: event.target.value }, true)} maxLength={160} placeholder="例如：西湖区、湖滨路店" /></label>
+        <div className="hotel-editor-dates">
           <label>入住<input aria-label={`酒店 ${index + 1} 入住日期`} type="date" value={hotel.checkIn} onChange={event => updateHotel(index, { checkIn: event.target.value })} /></label>
           <label>退房<input aria-label={`酒店 ${index + 1} 退房日期`} type="date" value={hotel.checkOut} onChange={event => updateHotel(index, { checkOut: event.target.value })} /></label>
         </div>

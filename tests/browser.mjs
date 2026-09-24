@@ -20,6 +20,12 @@ try {
       assert.equal(await page.locator('.hero h1').evaluate(element => getComputedStyle(element).color), 'rgb(255, 253, 248)');
       assert.equal(await page.locator('.journey-preview[data-state="idle"]').count(), 1);
       assert.ok((await page.locator('.journey-preview-foot').innerText()).includes('不代表真实路线'));
+      const desktopLaunchWidth = await page.locator('.launch-content').evaluate(element => element.getBoundingClientRect().width);
+      assert.ok(desktopLaunchWidth >= 600, `Desktop planning rail should be at least 600px, got ${desktopLaunchWidth}`);
+      await page.setViewportSize({ width: 1180, height: 900 });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'Intermediate layout must not overflow');
+      const intermediateGrid = await page.locator('.experience-grid').evaluate(element => getComputedStyle(element).gridTemplateColumns.split(' ').length);
+      assert.equal(intermediateGrid, 1, 'Intermediate layout should stack the planning rail and map');
       await page.setViewportSize({ width: 390, height: 844 });
       const mobileActionRect = await page.getByRole('button', { name: '请先选择目的地' }).evaluate(element => element.getBoundingClientRect().toJSON());
       assert.ok(mobileActionRect.top >= 0 && mobileActionRect.bottom <= 844, 'Mobile primary action must be visible in the first viewport');
@@ -40,6 +46,10 @@ try {
       if (mode === 'fixtures') {
         await page.getByRole('button', { name: '添加酒店' }).click();
         await page.getByLabel('酒店 1 名称').fill('测试酒店');
+        const hotelCard = await page.locator('.hotel-editor').boundingBox();
+        const checkInBox = await page.getByLabel('酒店 1 入住日期').boundingBox();
+        const checkOutBox = await page.getByLabel('酒店 1 退房日期').boundingBox();
+        assert.ok(hotelCard && checkInBox && checkOutBox && checkOutBox.x + checkOutBox.width <= hotelCard.x + hotelCard.width, 'Hotel date controls must stay inside their card');
         const checkIn = await page.getByLabel('酒店 1 入住日期').inputValue();
         const checkOut = new Date(`${checkIn}T00:00:00Z`); checkOut.setUTCDate(checkOut.getUTCDate() + 1);
         await page.getByLabel('酒店 1 退房日期').fill(checkOut.toISOString().slice(0, 10));

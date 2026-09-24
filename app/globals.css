@@ -61,7 +61,7 @@ a { color: inherit; }
 .app-shell {
   position: relative;
   z-index: 1;
-  width: min(100%, 1480px);
+  width: min(100%, 1680px);
   margin: 0 auto;
   padding: 18px 28px 80px;
 }
@@ -98,7 +98,7 @@ a { color: inherit; }
   grid-template-areas:
     "launch map"
     "stage map";
-  grid-template-columns: minmax(410px, .78fr) minmax(560px, 1.42fr);
+  grid-template-columns: minmax(600px, 640px) minmax(560px, 1fr);
   gap: 28px;
   align-items: start;
 }
@@ -478,7 +478,7 @@ ul { padding-left: 17px; }
 
 * { scrollbar-width: thin; scrollbar-color: #9fb2a7 transparent; }
 
-@media (max-width: 1050px) {
+@media (max-width: 1240px) {
   .experience-grid {
     grid-template-areas: "launch" "map" "stage";
     grid-template-columns: minmax(0, 1fr);
@@ -489,7 +489,7 @@ ul { padding-left: 17px; }
   .stage-content { width: min(100%, 900px); margin: 0 auto; }
 }
 
-@media (min-width: 1051px) {
+@media (min-width: 1241px) {
   .hero { padding: 32px 4px 20px; }
   .hero h1 { font-size: clamp(43px, 4.15vw, 64px); line-height: 1.08; }
   .hero > p { margin-top: 16px; line-height: 1.65; }
