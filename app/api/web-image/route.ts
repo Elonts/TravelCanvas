@@ -15,6 +15,7 @@ function blockedAddress(address: string) {
 }
 
 export async function GET(request: NextRequest) {
+  if (process.env.TRAVELCANVAS_WEB_IMAGES === 'off') return Response.json({ error: '联网补图在当前部署中已关闭' }, { status: 404 });
   const url = getWebImage(request.nextUrl.searchParams.get('id') || '');
   if (!url) return Response.json({ error: '图片链接已失效，请重新查询' }, { status: 404 });
   try {

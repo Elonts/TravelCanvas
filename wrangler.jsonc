@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "travelcanvas",
+  "compatibility_date": "2026-09-25",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "main": "vinext/server/fetch-handler",
+  "vars": {
+    "TRAVELCANVAS_PLATFORM": "cloudflare",
+    "TRAVELCANVAS_SCRAPLING_PYTHON": "off",
+    "TRAVELCANVAS_WEB_IMAGES": "off",
+    "DEEPSEEK_MODEL": "deepseek-v4-flash"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TRAVEL_STATE",
+        "class_name": "TravelState",
+        "script_name": "travelcanvas-state"
+      }
+    ]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  }
+}

@@ -36,6 +36,14 @@ test('discovery store replaces progressive guide enrichment without changing its
   assert.equal(store.get(saved.discoveryId).candidates[0].id, 'hz2');
 });
 
+test('discovery store rejects a stale progressive replacement', () => {
+  const store = new DiscoveryStore({ clock: () => 1000 });
+  const saved = store.save({ request: { destinations: ['杭州'] }, candidates: [candidate('hz', '杭州')], warnings: [], sources: {} });
+  const current = store.getVersioned(saved.discoveryId);
+  store.replace(saved.discoveryId, current.value, current.version);
+  assert.throws(() => store.replace(saved.discoveryId, current.value, current.version), /已变更/);
+});
+
 test('a manually kept child attraction cannot be selected together with its main scenic area', () => {
   const store = new DiscoveryStore();
   const saved = store.save({ request: { destinations: ['珠海'] }, candidates: [

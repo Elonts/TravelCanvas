@@ -175,7 +175,7 @@ function mergeCandidateEvidence(candidate: DiscoveryCandidate, evidence: Discove
   } : candidate;
 }
 
-export async function mergeDiscoveryWithXhsSession(discovery: DiscoveryResult, batch: XhsSessionBatch) {
+export async function mergeDiscoveryWithXhsSession(discovery: Omit<DiscoveryResult, 'discoveryId' | 'expiresAt'>, batch: XhsSessionBatch) {
   if (!discovery.request.destinations.includes(batch.city)) throw Error('登录态结果城市不属于本次行程');
   if (!process.env.AMAP_API_KEY) throw Error('高德服务未配置，无法核验登录态搜索中的地点');
   const sources = xhsSources(batch);
@@ -240,7 +240,7 @@ export async function mergeDiscoveryWithXhsSession(discovery: DiscoveryResult, b
   };
 }
 
-export async function enrichDiscoveryWithGuides(discovery: Awaited<ReturnType<typeof discoverCandidates>>) {
+export async function enrichDiscoveryWithGuides(discovery: Omit<DiscoveryResult, 'discoveryId' | 'expiresAt'>) {
   const { request } = discovery;
   const searches = await Promise.all(request.destinations.map(city => searchTravelGuides(city, request.preferences, request.constraints, process.env, fetch,
     discovery.candidates.filter(candidate => candidate.city === city && candidate.kind === 'attraction').slice(0, 6).map(candidate => candidate.name))));

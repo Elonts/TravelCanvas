@@ -21,7 +21,7 @@ TravelCanvas 使用“两阶段 + 顺路补全”的方式解决这些问题：
 3. 使用出发地、跨城站点、已订酒店和景区生成逐日基础路线；
 4. 基于基础路线筛选午晚餐和娱乐地点，确认后再写入最终路线。
 
-当前版本是单用户、本地运行的 MVP，没有账号体系和数据库。方案保存在服务端内存中，约 30 分钟后过期。
+当前版本是单用户 MVP，没有账号体系。直接在本地运行时，候选和方案保存在服务端内存中；部署到 Cloudflare 时，状态保存在内部 Durable Object 中。两种模式均约 30 分钟后过期。
 
 ## 2. 主要功能
 
@@ -40,7 +40,7 @@ TravelCanvas 使用“两阶段 + 顺路补全”的方式解决这些问题：
 
 ### 环境要求
 
-- Node.js `>= 20.9.0`
+- Node.js `>= 22.12.0`
 - npm（随 Node.js 安装）
 - 可选：Python 与 Scrapling，用于尝试读取公开攻略正文；未安装不会阻塞主流程
 
@@ -79,6 +79,7 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_AMAP_JS_KEY` | 可选 | 浏览器端高德 JS API Key，用于显示真实底图 |
 | `NEXT_PUBLIC_AMAP_SECURITY_JS_CODE` | 可选 | 与高德 JS API Key 配套的浏览器端安全密钥 |
 | `TRAVELCANVAS_SCRAPLING_PYTHON` | 可选 | 指向已安装 Scrapling 0.4.15 的 Python；设置为 `off` 可关闭正文读取 |
+| `TRAVELCANVAS_WEB_IMAGES` | 可选 | 设置为 `off` 可关闭 Tavily 缺图补充与联网图片代理；Cloudflare 部署默认关闭 |
 
 不要提交 `.env` 或 `.env.local`。高德浏览器 Key 和安全密钥会发送到浏览器，必须在高德控制台限制可用域名；它们不能与服务端 `AMAP_API_KEY` 共用。Scrapling 的可选安装方式见 [Scrapling可选安装说明.md](./Scrapling可选安装说明.md)。
 
@@ -100,6 +101,19 @@ npm start
 ```
 
 默认访问地址仍为 <http://localhost:3000>。
+
+### Cloudflare Workers 部署
+
+仓库包含两个 Worker：`travelcanvas-state` 是不对公网开放的状态服务，`travelcanvas` 是公开应用。部署顺序不能颠倒：
+
+```bash
+npm run deploy:state
+npm run deploy:cloudflare
+```
+
+部署前使用 `npx wrangler login` 登录 Cloudflare，并分别通过 `wrangler secret put <变量名> --config wrangler.jsonc` 设置 `AMAP_API_KEY`、`DEEPSEEK_API_KEY`、`TAVILY_API_KEY` 等服务端密钥。不要把真实值写进配置或提交到 Git。
+
+Cloudflare 环境默认关闭 Scrapling 正文抓取和 Tavily 联网图片代理，因为 Workers 不提供 Python 进程，且 Node.js DNS API 不支持现有图片代理所需的私网地址复核。高德 POI 自带图片仍可正常使用。自定义域名应在 Cloudflare Workers 的 Custom Domains 中绑定；随后把该域名加入高德 JS API Key 的域名白名单。
 
 ### Windows 一键启动
 

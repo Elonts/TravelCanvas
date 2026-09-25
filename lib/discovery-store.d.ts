@@ -6,6 +6,7 @@ export class DiscoveryStore {
   save(value: { request: TripRequest; candidates: DiscoveryCandidate[]; guideSources?: GuideSource[]; sources: unknown; warnings: string[] }): unknown;
   select(discoveryId: string, selectedIds: string[]): { request: TripRequest; candidates: DiscoveryCandidate[]; guideSources?: GuideSource[]; sources: unknown; warnings: string[] };
   get(discoveryId: string): { request: TripRequest; candidates: DiscoveryCandidate[]; guideSources?: GuideSource[]; sources: unknown; warnings: string[] };
-  replace(discoveryId: string, value: unknown): unknown;
+  getVersioned(discoveryId: string): { value: { request: TripRequest; candidates: DiscoveryCandidate[]; guideSources?: GuideSource[]; sources: unknown; warnings: string[] }; version: number; expiresAt: number };
+  replace(discoveryId: string, value: unknown, expectedVersion?: number | null): unknown;
 }
 export const discoveryStore: DiscoveryStore;

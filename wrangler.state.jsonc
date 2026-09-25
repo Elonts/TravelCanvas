@@ -1,0 +1,29 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "travelcanvas-state",
+  "main": "workers/travel-state.mjs",
+  "compatibility_date": "2026-09-25",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TRAVEL_STATE",
+        "class_name": "TravelState"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "TravelState"
+      ]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

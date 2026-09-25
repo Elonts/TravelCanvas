@@ -16,7 +16,7 @@ test('README covers the required project, install, usage and example sections', 
     '## 5. 输入输出示例',
   ]) assert.match(readme, new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
 
-  assert.match(readme, /Node\.js `>= 20\.9\.0`/);
+  assert.match(readme, /Node\.js `>= 22\.12\.0`/);
   assert.match(readme, /npm ci/);
   assert.match(readme, /npm run dev/);
   assert.match(readme, /npm run check/);

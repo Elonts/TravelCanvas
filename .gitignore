@@ -8,3 +8,6 @@ coverage/
 test-artifacts/
 *.tsbuildinfo
 .impeccable/questions/
+/dist/
+.vinext/
+.wrangler/
