@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const target = new URL(url);
     const addresses = await lookup(target.hostname, { all: true });
     if (!addresses.length || addresses.some(item => blockedAddress(item.address))) throw Error('unsafe host');
-    const upstream = await fetch(target, { signal: AbortSignal.timeout(8000), redirect: 'error', headers: { Accept: 'image/avif,image/webp,image/*' } });
+    const upstream = await fetch(target, { signal: AbortSignal.timeout(8000), redirect: 'manual', headers: { Accept: 'image/avif,image/webp,image/*' } });
     const type = upstream.headers.get('content-type') || '';
     const length = Number(upstream.headers.get('content-length') || 0);
     if (!upstream.ok || !type.startsWith('image/') || length > 5_000_000) throw Error('invalid image');

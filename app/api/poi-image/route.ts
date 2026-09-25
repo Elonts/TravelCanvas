@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   const source = safeAmapImageUrl(new URL(request.url).searchParams.get('url') || '');
   if (!source) return new Response('Invalid image source', { status: 400 });
   try {
-    const response = await fetch(source, { cache: 'force-cache', redirect: 'error', signal: AbortSignal.timeout(8000) });
+    const response = await fetch(source, { cache: 'force-cache', redirect: 'manual', signal: AbortSignal.timeout(8000) });
     const contentType = response.headers.get('content-type') || '';
     if (!response.ok || !contentType.startsWith('image/')) return new Response('Image unavailable', { status: 404 });
     const bytes = await readBoundedImage(response);

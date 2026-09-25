@@ -16,7 +16,7 @@ test('automatic search restricts domain, validates result URLs and deduplicates'
     assert.equal(url, 'https://api.tavily.com/search');
     const body = JSON.parse(options.body); assert.deepEqual(body.include_domains, ['xiaohongshu.com']); assert.ok(body.query.includes('杭州'));
     assert.equal(body.search_depth, 'advanced'); assert.equal(body.chunks_per_source, 3);
-    assert.ok(options.signal); assert.equal(options.redirect, 'error');
+    assert.ok(options.signal); assert.equal(options.redirect, 'manual');
     return new Response(JSON.stringify({ results: [{ title: '杭州美食A', url: 'https://www.xiaohongshu.com/explore/abc123?token=one', content: '杭州正文' }, { title: '杭州美食A', url: 'https://www.xiaohongshu.com/explore/abc123?token=two', content: '杭州正文' }, { title: '伪造', url: 'https://evil.test', content: '杭州正文' }] }));
   });
   assert.equal(calls, 3);
