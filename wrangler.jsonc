@@ -6,6 +6,16 @@
     "nodejs_compat"
   ],
   "main": "vinext/server/fetch-handler",
+  "routes": [
+    {
+      "pattern": "travelcanvasc.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.travelcanvasc.com",
+      "custom_domain": true
+    }
+  ],
   "vars": {
     "TRAVELCANVAS_PLATFORM": "cloudflare",
     "TRAVELCANVAS_SCRAPLING_PYTHON": "off",
