@@ -19,7 +19,7 @@
   "vars": {
     "TRAVELCANVAS_PLATFORM": "cloudflare",
     "TRAVELCANVAS_SCRAPLING_PYTHON": "off",
-    "TRAVELCANVAS_WEB_IMAGES": "off",
+    "TRAVELCANVAS_WEB_IMAGES": "on",
     "DEEPSEEK_MODEL": "deepseek-v4-flash"
   },
   "durable_objects": {

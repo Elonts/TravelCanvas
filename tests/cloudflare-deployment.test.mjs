@@ -13,4 +13,5 @@ test('Cloudflare deployment keeps both production custom domains', async () => {
     { pattern: 'travelcanvasc.com', custom_domain: true },
     { pattern: 'www.travelcanvasc.com', custom_domain: true },
   ]);
+  assert.equal(config.vars.TRAVELCANVAS_WEB_IMAGES, 'on');
 });

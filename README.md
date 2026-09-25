@@ -79,7 +79,7 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_AMAP_JS_KEY` | 可选 | 浏览器端高德 JS API Key，用于显示真实底图 |
 | `NEXT_PUBLIC_AMAP_SECURITY_JS_CODE` | 可选 | 与高德 JS API Key 配套的浏览器端安全密钥 |
 | `TRAVELCANVAS_SCRAPLING_PYTHON` | 可选 | 指向已安装 Scrapling 0.4.15 的 Python；设置为 `off` 可关闭正文读取 |
-| `TRAVELCANVAS_WEB_IMAGES` | 可选 | 设置为 `off` 可关闭 Tavily 缺图补充与联网图片代理；Cloudflare 部署默认关闭 |
+| `TRAVELCANVAS_WEB_IMAGES` | 可选 | 设置为 `off` 可关闭 Tavily 缺图补充与联网图片代理；生产部署默认开启 |
 
 不要提交 `.env` 或 `.env.local`。高德浏览器 Key 和安全密钥会发送到浏览器，必须在高德控制台限制可用域名；它们不能与服务端 `AMAP_API_KEY` 共用。Scrapling 的可选安装方式见 [Scrapling可选安装说明.md](./Scrapling可选安装说明.md)。
 
@@ -113,7 +113,7 @@ npm run deploy:cloudflare
 
 部署前使用 `npx wrangler login` 登录 Cloudflare，并分别通过 `wrangler secret put <变量名> --config wrangler.jsonc` 设置 `AMAP_API_KEY`、`DEEPSEEK_API_KEY`、`TAVILY_API_KEY` 等服务端密钥。不要把真实值写进配置或提交到 Git。
 
-Cloudflare 环境默认关闭 Scrapling 正文抓取和 Tavily 联网图片代理，因为 Workers 不提供 Python 进程，且 Node.js DNS API 不支持现有图片代理所需的私网地址复核。高德 POI 自带图片仍可正常使用。自定义域名应在 Cloudflare Workers 的 Custom Domains 中绑定；随后把该域名加入高德 JS API Key 的域名白名单。
+Cloudflare 环境关闭 Scrapling 正文抓取，因为 Workers 不提供 Python 进程；Tavily 缺图补充通过短时有效的加密图片链接和受控服务端代理运行，不会把原始图片地址直接暴露给浏览器。高德 POI 自带图片也通过服务端代理加载。自定义域名应在 Cloudflare Workers 的 Custom Domains 中绑定；随后把该域名加入高德 JS API Key 的域名白名单。
 
 ### Windows 一键启动
 
